@@ -1,0 +1,57 @@
+image: node:18-alpine
+
+stages:
+  - build
+  - publish
+
+# Cache das dependências
+cache:
+  paths:
+    - node_modules/
+    - .pnpm-store/
+
+variables:
+  PNPM_VERSION: "9.0.0"
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+
+# Instalar pnpm antes de cada job
+before_script:
+  - npm install -g pnpm@$PNPM_VERSION
+  - pnpm config set store-dir .pnpm-store
+
+# Job de build
+build:
+  stage: build
+  tags:
+    - kyc-runner
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm build
+    - pnpm typecheck
+  artifacts:
+    paths:
+      - packages/core/dist/
+    expire_in: 1 day
+  only:
+    - merge_requests
+    - dev
+    - main
+
+# Job de publicação no npm
+publish_npm:
+  stage: publish
+  tags:
+    - kyc-runner
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm build
+    # Configurar npm com o token
+    - echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" > ~/.npmrc
+    # Publicar o pacote
+    - cd packages/core
+    - pnpm publish --access public --no-git-checks
+  only:
+    - tags
+    - main
+  except:
+    - merge_requests
