@@ -25,7 +25,7 @@
     }
   },
   "dependencies": {
-    "@kyciris/core": "workspace:*",
+    "@bipkyc/core": "workspace:*",
     "expo-camera": "~17.0.10"
   },
   "devDependencies": {

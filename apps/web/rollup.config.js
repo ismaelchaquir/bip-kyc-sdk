@@ -29,5 +29,5 @@ export default {
       exclude: ['../../packages/**'],
     }),
   ],
-  external: ['react', 'react-dom', '@kyciris/core'],
+  external: ['react', 'react-dom', '@bipkyc/core'],
 };

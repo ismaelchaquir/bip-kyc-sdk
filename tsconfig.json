@@ -19,7 +19,7 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@kyciris/core": ["packages/core/src"],
+      "@bipkyc/core": ["packages/core/src"],
       "@kyciris/mobile": ["apps/mobile/src"],
       "@kyciris/web": ["apps/web/src"]
     }

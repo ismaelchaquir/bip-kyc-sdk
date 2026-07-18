@@ -5,7 +5,7 @@ React Native mobile SDK with pre-built UI for KYC (Know Your Customer) verificat
 ## Installation
 
 ```bash
-pnpm add @kyciris/mobile @kyciris/core
+pnpm add @kyciris/mobile @bipkyc/core
 ```
 
 ### Peer Dependencies
@@ -139,4 +139,4 @@ Errors are displayed in an inline error banner with a dismiss button. The `onErr
 
 ## Related Packages
 
-- [`@kyciris/core`](../core/README.md) - Core SDK with UI-agnostic functions
+- [`@bipkyc/core`](../core/README.md) - Core SDK with UI-agnostic functions

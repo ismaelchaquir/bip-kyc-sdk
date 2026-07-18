@@ -15,7 +15,7 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@kyciris/core": ["../../packages/core/src"]
+      "@bipkyc/core": ["../../packages/core/src"]
     }
   },
   "include": ["src/**/*"],

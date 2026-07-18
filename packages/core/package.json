@@ -1,6 +1,13 @@
 {
-  "name": "@kyciris/core",
+  "name": "@bipkyc/core",
   "version": "0.1.1",
+  "description": "UI-agnostic core SDK for the Bip KYC verification API",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ismaelchaquir/bip-kyc-sdk.git",
+    "directory": "packages/core"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -8,6 +15,12 @@
     "types": "./dist/index.d.ts",
     "import": "./dist/index.mjs",
     "require": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsup",

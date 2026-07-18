@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { createKYCClient, KYCCredentials, KYCStatusEvent, VerificationStatus } from '@kyciris/core';
+import { createKYCClient, KYCCredentials, KYCStatusEvent, VerificationStatus } from '@bipkyc/core';
 
 export interface PaytesyKYCWebConfig {
   apiKey: string;

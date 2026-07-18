@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
-import { createKYCClient, KYCStatusEvent } from '@kyciris/core';
+import { createKYCClient, KYCStatusEvent } from '@bipkyc/core';
 
 export interface KycirisConfig {
   apiKey: string;

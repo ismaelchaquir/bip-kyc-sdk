@@ -4,7 +4,7 @@ A monorepo containing the Paytesy KYC SDK packages.
 
 ## Packages
 
-- [`@kyciris/core`](./packages/core/README.md) - Core SDK with UI-agnostic KYC functions
+- [`@bipkyc/core`](./packages/core/README.md) - Core SDK with UI-agnostic KYC functions
 - [`@kyciris/mobile`](./apps/mobile/README.md) - React Native mobile SDK with pre-built UI
 - `@kyciris/web` - Web SDK with pre-built UI
 
@@ -40,7 +40,7 @@ pnpm clean
 For detailed usage instructions, see the [Core SDK documentation](./packages/core/README.md).
 
 ```typescript
-import { createKYCClient } from '@kyciris/core';
+import { createKYCClient } from '@bipkyc/core';
 
 const client = createKYCClient({
   apiKey: 'your-api-key',

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { createKYCClient, KYCCredentials } from '@kyciris/core';
+import { createKYCClient, KYCCredentials } from '@bipkyc/core';
 import { useVerificationStore } from '../store/verificationStore';
 
 const TEST_CREDENTIALS: KYCCredentials = {
