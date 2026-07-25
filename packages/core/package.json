@@ -1,11 +1,11 @@
 {
-  "name": "@bipkyc/core",
+  "name": "@bipdelivery/core",
   "version": "0.1.1",
   "description": "UI-agnostic core SDK for the Bip KYC verification API",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ismaelchaquir/bip-kyc-sdk.git",
+    "url": "git+https://github.com/ismaelchaquir/bip-kyc-sdk.git",
     "directory": "packages/core"
   },
   "main": "./dist/index.js",

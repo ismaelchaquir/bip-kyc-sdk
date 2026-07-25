@@ -1,11 +1,11 @@
-# @bipkyc/core
+# @bipdelivery/core
 
 Core SDK package with UI-agnostic KYC (Know Your Customer) functions. Use this package if you want to build your own UI while leveraging Paytesy's verification services.
 
 ## Installation
 
 ```bash
-pnpm add @bipkyc/core
+pnpm add @bipdelivery/core
 ```
 
 ## Usage
@@ -13,7 +13,7 @@ pnpm add @bipkyc/core
 ### Initialization
 
 ```typescript
-import { createKYCClient } from '@bipkyc/core';
+import { createKYCClient } from '@bipdelivery/core';
 
 const kyc = createKYCClient({
   apiKey: 'your-api-key',
@@ -176,7 +176,7 @@ try {
 ## Example
 
 ```typescript
-import { createKYCClient } from '@bipkyc/core';
+import { createKYCClient } from '@bipdelivery/core';
 
 async function runKYC() {
   const kyc = createKYCClient({
