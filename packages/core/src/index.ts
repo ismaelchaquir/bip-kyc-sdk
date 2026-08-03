@@ -80,6 +80,33 @@ export interface FaceMatchStatusParams {
 }
 
 /**
+ * A capture the flow asks the applicant for. `liveness` replaces `selfie`
+ * rather than adding to it: it is a selfie captured through a challenge.
+ */
+export type FlowStep = 'document' | 'selfie' | 'liveness' | 'proofOfAddress';
+
+/** The named flows a project can be configured with. */
+export type FlowPreset =
+  | 'document_selfie'
+  | 'document_liveness'
+  | 'document_selfie_address'
+  | 'document_liveness_address';
+
+/**
+ * The project's verification flow, as issued with the session.
+ *
+ * The server decides this, not the app: a flow requiring the liveness
+ * challenge rejects a plain selfie, so a client that guessed would fail every
+ * applicant.
+ */
+export interface VerificationFlow {
+  /** Null for projects still on the pre-preset configuration. */
+  preset: FlowPreset | null;
+  steps: FlowStep[];
+  locale: string;
+}
+
+/**
  * Response from starting a verification session
  */
 export interface VerificationSession {
@@ -89,6 +116,23 @@ export interface VerificationSession {
   identityId?: string;
   /** Current verification status */
   status: string;
+  /**
+   * The configured flow. Absent when talking to a gateway older than flow
+   * presets — treat that as the plain selfie flow.
+   */
+  flow?: VerificationFlow;
+}
+
+/**
+ * Whether the flow's face step must be captured through a liveness challenge.
+ *
+ * Defaults to false for a session with no flow, which is what an older gateway
+ * returns and what its selfie endpoint expects.
+ */
+export function requiresLivenessChallenge(
+  session: Pick<VerificationSession, 'flow'> | null | undefined
+): boolean {
+  return session?.flow?.steps.includes('liveness') ?? false;
 }
 
 /**
