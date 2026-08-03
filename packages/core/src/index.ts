@@ -92,6 +92,53 @@ export interface VerificationSession {
 }
 
 /**
+ * A head movement the applicant can be asked to perform during active liveness.
+ */
+export type LivenessAction = 'turn_left' | 'turn_right' | 'look_up' | 'look_down';
+
+/**
+ * A server-issued, single-use liveness challenge.
+ *
+ * The action sequence must come from the server — a client that picks its own
+ * sequence provides no replay protection, since an attacker would simply choose
+ * one matching a clip they already hold.
+ */
+export interface LivenessChallenge {
+  /** Opaque challenge ID, submitted back with the selfie */
+  id: string;
+  /** The movements to prompt, in order */
+  actions: LivenessAction[];
+  /** ISO timestamp when the challenge was issued */
+  issuedAt: string;
+  /** ISO timestamp after which the challenge is rejected */
+  expiresAt: string;
+}
+
+/**
+ * The client's own account of how the challenge went.
+ *
+ * Advisory only. The server re-derives head pose from the submitted frames and
+ * decides for itself; this is recorded for diagnostics, and a mismatch between
+ * it and the frames is itself a useful fraud signal.
+ */
+export interface ClientChallengeReport {
+  challengeId: string;
+  actions: LivenessAction[];
+  /** Per-action pass/fail as judged on-device, in prompt order */
+  passed?: boolean[];
+  /** Milliseconds from challenge start to each action being satisfied */
+  timingsMs?: number[];
+}
+
+/** Active-liveness evidence submitted alongside the selfie. */
+export interface LivenessEvidence {
+  /** Frames captured while the challenge ran, in capture order */
+  frames: string[];
+  /** What the client believes happened; the challengeId is the load-bearing part */
+  report: ClientChallengeReport;
+}
+
+/**
  * Parameters for uploading a selfie image
  */
 export interface UploadSelfieParams {
@@ -101,6 +148,11 @@ export interface UploadSelfieParams {
   imageData: string;
   /** MIME type of the image (default: image/jpeg) */
   mimeType?: string;
+  /**
+   * Optional active-liveness evidence. When omitted the server falls back to
+   * the passive single-frame check, so existing callers are unaffected.
+   */
+  liveness?: LivenessEvidence;
 }
 
 /**
@@ -141,6 +193,11 @@ export interface UploadStepParams {
   identityId?: string;
   /** MIME type of the image (default: image/jpeg) */
   mimeType?: string;
+  /**
+   * Active-liveness evidence, used only when `step` is 'selfie'. Ignored for
+   * document steps.
+   */
+  liveness?: LivenessEvidence;
 }
 
 /** Current status of a verification session */
@@ -285,6 +342,12 @@ export class KYCCore {
   private credentials: KYCCredentials;
   private eventCallbacks: KYCEventCallback[] = [];
   private storage?: KYCStorage;
+  /**
+   * Short-lived verification token issued by /verification/token. When present
+   * it is sent as a Bearer header so the SDK also works in token-only mode
+   * (the gateway accepts either the API key or the verification token).
+   */
+  private verificationToken: string | null = null;
 
   /** Storage key under which the active verification session is persisted */
   private static readonly SESSION_KEY = 'kyc:session';
@@ -306,6 +369,10 @@ export class KYCCore {
 
     this.client.interceptors.request.use((config) => {
       config.headers['x-api-key'] = this.credentials.apiKey;
+      if (this.verificationToken) {
+        config.headers['Authorization'] = `Bearer ${this.verificationToken}`;
+        config.headers['x-verification-token'] = this.verificationToken;
+      }
       return config;
     });
   }
@@ -386,6 +453,10 @@ export class KYCCore {
         expiry,
       });
 
+      // Store the token so subsequent requests authenticate as the applicant
+      // (the gateway's VerificationTokenOrApiKeyGuard accepts either).
+      this.verificationToken = response.data.token;
+
       return response.data;
     } catch (error: any) {
       const message =
@@ -432,32 +503,58 @@ export class KYCCore {
    * @param params Parameters including verificationId, imageData, and optional mimeType
    * @returns Upload result with status
    */
+  /**
+   * Requests a fresh active-liveness challenge for a verification.
+   *
+   * Re-requesting replaces any outstanding challenge, so an applicant who
+   * abandons the screen gets a new random sequence rather than being able to
+   * retry until they draw one they have a recording for.
+   */
+  async createLivenessChallenge(verificationId: string): Promise<LivenessChallenge> {
+    try {
+      const response = await this.client.post('/verification/liveness/challenge', {
+        verificationId,
+      });
+      return response.data;
+    } catch (error: any) {
+      const message =
+        error.response?.data?.message || error.message || 'Failed to create liveness challenge';
+      throw new KYCSdkError(message, 'LIVENESS_CHALLENGE_FAILED', error.response?.status);
+    }
+  }
+
+  /**
+   * Appends an image to a FormData under `field`, normalizing the three shapes
+   * callers pass: a file:// URI, a data: URI, or raw base64.
+   */
+  private appendImage(
+    formData: FormData,
+    field: string,
+    imageData: string,
+    mimeType: string,
+    name: string
+  ): void {
+    const uri =
+      imageData.startsWith('file://') || imageData.startsWith('data:')
+        ? imageData
+        : `data:${mimeType};base64,${imageData}`;
+
+    formData.append(field, { uri, type: mimeType, name } as any);
+  }
+
   async uploadSelfie(params: UploadSelfieParams): Promise<UploadResult> {
     try {
       const formData = new FormData();
       formData.append('verificationId', params.verificationId);
 
       const mimeType = params.mimeType || 'image/jpeg';
-      const imageData = params.imageData;
+      this.appendImage(formData, 'file', params.imageData, mimeType, 'selfie.jpg');
 
-      if (imageData.startsWith('file://')) {
-        formData.append('file', {
-          uri: imageData,
-          type: mimeType,
-          name: 'selfie.jpg',
-        } as any);
-      } else if (imageData.startsWith('data:')) {
-        formData.append('file', {
-          uri: imageData,
-          type: mimeType,
-          name: 'selfie.jpg',
-        } as any);
-      } else {
-        formData.append('file', {
-          uri: `data:${mimeType};base64,${imageData}`,
-          type: mimeType,
-          name: 'selfie.jpg',
-        } as any);
+      if (params.liveness) {
+        params.liveness.frames.forEach((frame, index) => {
+          this.appendImage(formData, 'frames', frame, mimeType, `frame-${index}.jpg`);
+        });
+        formData.append('challengeReport', JSON.stringify(params.liveness.report));
       }
 
       const response = await this.client.post('/verification/upload/selfie', formData, {
@@ -724,6 +821,7 @@ export class KYCCore {
         verificationId,
         imageData: params.imageData,
         mimeType: params.mimeType,
+        liveness: params.liveness,
       });
     }
 
