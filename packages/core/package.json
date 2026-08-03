@@ -1,6 +1,6 @@
 {
   "name": "@bipdelivery/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "UI-agnostic core SDK for the Bip KYC verification API",
   "license": "MIT",
   "repository": {
