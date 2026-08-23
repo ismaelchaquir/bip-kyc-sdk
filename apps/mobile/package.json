@@ -25,8 +25,8 @@
     }
   },
   "dependencies": {
-    "@bipkyc/core": "workspace:*",
-    "expo-camera": "~17.0.10"
+    "expo-camera": "~17.0.10",
+    "@bipdelivery/core": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",

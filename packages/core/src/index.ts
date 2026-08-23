@@ -1012,3 +1012,12 @@ export class KYCCore {
 export function createKYCClient(credentials: KYCCredentials): KYCCore {
   return KYCCore.createClient(credentials);
 }
+
+/**
+ * Active-liveness challenge rules, shared by every client.
+ *
+ * Pure logic: no React, no camera, no platform API. Both the driver app and the
+ * web SDK drive the same machine with poses from different detectors, which is
+ * what keeps their behaviour identical against a server that judges them both.
+ */
+export * from './liveness/challenge-machine';

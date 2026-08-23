@@ -11,5 +11,5 @@ export default defineConfig({
   treeshake: true,
   target: 'es2020',
   platform: 'browser',
-  noExternal: ['@bipkyc/core'],
+  noExternal: ['@bipdelivery/core'],
 });

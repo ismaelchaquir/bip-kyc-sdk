@@ -15,7 +15,7 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@bipkyc/core": ["../../packages/core/src"]
+      "@bipdelivery/core": ["../../packages/core/src"]
     }
   },
   "include": ["src/**/*"],

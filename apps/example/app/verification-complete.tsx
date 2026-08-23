@@ -9,7 +9,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { createKYCClient, KYCCredentials, VerificationStatus } from '@bipkyc/core';
+import { createKYCClient, KYCCredentials, VerificationStatus } from '@bipdelivery/core';
 import { useVerificationStore } from '../store/verificationStore';
 
 const TEST_CREDENTIALS: KYCCredentials = {

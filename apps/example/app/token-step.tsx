@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { createKYCClient, KYCCredentials } from '@bipkyc/core';
+import { createKYCClient, KYCCredentials } from '@bipdelivery/core';
 import { useVerificationStore } from '../store/verificationStore';
 
 const TEST_CREDENTIALS: KYCCredentials = {
