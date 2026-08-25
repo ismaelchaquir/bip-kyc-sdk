@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
@@ -16,6 +17,14 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
  * error rather than anything that points at the cause. basic-ssl issues a
  * self-signed cert so the phone can reach the laptop over https.
  */
+function buildId(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
 export default defineConfig({
   root: 'playground',
   // Served under a path on the existing kyc host rather than its own subdomain,
@@ -27,6 +36,13 @@ export default defineConfig({
     emptyOutDir: true,
   },
   plugins: [react(), basicSsl()],
+  // Stamped into the page so the running build is visible on the device.
+  // Without it a stale cached index.html is indistinguishable from a fix that
+  // did not work — which cost a full investigation once, on a phone that held
+  // the same manifest across three deploys.
+  define: {
+    __BUILD_ID__: JSON.stringify(buildId()),
+  },
   server: {
     // Bind every interface so a phone on the same wifi can reach it.
     host: true,

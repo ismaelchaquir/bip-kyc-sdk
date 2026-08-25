@@ -176,6 +176,9 @@ function App() {
       <p style={{ opacity: 0.6, fontSize: 12, wordBreak: 'break-all' }}>
         {API_BASE} · {session!.verificationId}
       </p>
+      {/* So a stale cached page is obvious on the device rather than looking
+          like a fix that did not take. */}
+      <p style={{ opacity: 0.45, fontSize: 11 }}>build {__BUILD_ID__}</p>
 
       {phase.kind === 'doc-front' && (
         <DocumentStep
