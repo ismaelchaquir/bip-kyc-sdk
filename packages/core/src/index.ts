@@ -381,6 +381,46 @@ export class KYCSdkError extends Error {
 /**
  * Core KYC SDK client for interacting with the verification API
  */
+/**
+ * A browser, as opposed to React Native.
+ *
+ * `document` is the discriminator rather than Blob or FileReader: RN polyfills
+ * several of those, so their presence proves nothing, while RN has no DOM.
+ */
+function isBrowser(): boolean {
+  return typeof document !== 'undefined';
+}
+
+/**
+ * base64 -> Blob, without a round trip through fetch().
+ *
+ * fetch(dataUri).then(r => r.blob()) is the usual trick and is async, which
+ * would make every append await-ing and change three call sites. atob is
+ * synchronous and present in every browser this SDK targets.
+ */
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
+/**
+ * Headers for a multipart POST.
+ *
+ * A browser MUST set Content-Type itself, because only it knows the multipart
+ * boundary it generated for the FormData. Setting the bare
+ * "multipart/form-data" by hand produces a header with no boundary, which a
+ * server cannot parse — the request arrives as an unparseable body rather than
+ * as fields. React Native's stack does not do this for us, so it keeps the
+ * explicit header.
+ */
+function multipartHeaders(): Record<string, string> {
+  return isBrowser() ? {} : { 'Content-Type': 'multipart/form-data' };
+}
+
 export class KYCCore {
   private client: AxiosInstance;
   private credentials: KYCCredentials;
@@ -570,6 +610,16 @@ export class KYCCore {
   /**
    * Appends an image to a FormData under `field`, normalizing the three shapes
    * callers pass: a file:// URI, a data: URI, or raw base64.
+   *
+   * The two runtimes need genuinely different things here, and conflating them
+   * is why the web SDK could not upload at all.
+   *
+   * React Native's FormData takes `{uri, type, name}` and reads the file off
+   * disk itself. A BROWSER's FormData has no such convention: handed a plain
+   * object it calls String() on it, so the request carried a text field
+   * containing the literal "[object Object]" and the gateway answered "file is
+   * required" — correctly, since no file had been sent. The `as any` that made
+   * this compile was silencing the exact type error that describes the bug.
    */
   private appendImage(
     formData: FormData,
@@ -578,12 +628,26 @@ export class KYCCore {
     mimeType: string,
     name: string
   ): void {
-    const uri =
-      imageData.startsWith('file://') || imageData.startsWith('data:')
-        ? imageData
-        : `data:${mimeType};base64,${imageData}`;
+    // A file:// URI is only meaningful to React Native, whatever the runtime.
+    if (imageData.startsWith('file://')) {
+      formData.append(field, { uri: imageData, type: mimeType, name } as any);
+      return;
+    }
 
-    formData.append(field, { uri, type: mimeType, name } as any);
+    const base64 = imageData.startsWith('data:')
+      ? imageData.slice(imageData.indexOf(',') + 1)
+      : imageData;
+
+    if (isBrowser()) {
+      formData.append(field, base64ToBlob(base64, mimeType), name);
+      return;
+    }
+
+    formData.append(field, {
+      uri: `data:${mimeType};base64,${base64}`,
+      type: mimeType,
+      name,
+    } as any);
   }
 
   async uploadSelfie(params: UploadSelfieParams): Promise<UploadResult> {
@@ -602,7 +666,7 @@ export class KYCCore {
       }
 
       const response = await this.client.post('/verification/upload/selfie', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: multipartHeaders(),
       });
 
       this.emitEvent({
@@ -653,7 +717,7 @@ export class KYCCore {
       }
 
       const response = await this.client.post('/verification/upload/document', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: multipartHeaders(),
       });
 
       this.emitEvent({
@@ -882,33 +946,15 @@ export class KYCCore {
       const formData = new FormData();
 
       const mimeType = params.mimeType || 'image/jpeg';
-      const imageData = params.file;
-
-      if (imageData.startsWith('file://')) {
-        formData.append('file', {
-          uri: imageData,
-          type: mimeType,
-          name: `selfie.jpg`,
-        } as any);
-      } else if (imageData.startsWith('data:')) {
-        formData.append('file', {
-          uri: imageData,
-          type: mimeType,
-          name: `selfie.jpg`,
-        } as any);
-      } else {
-        formData.append('file', {
-          uri: `data:${mimeType};base64,${imageData}`,
-          type: mimeType,
-          name: `selfie.jpg`,
-        } as any);
-      }
+      // Was three inlined branches of the same RN-only append — and so had the
+      // same browser bug as the others.
+      this.appendImage(formData, 'file', params.file, mimeType, 'selfie.jpg');
 
       const response = await this.client.post(
         `identities/${params.identityId}/face-match`,
         formData,
         {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers: multipartHeaders(),
         }
       );
       return response.data;
