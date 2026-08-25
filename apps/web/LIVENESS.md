@@ -86,3 +86,39 @@ is self-consistent, not that MediaPipe's axes are what we assume.
 The preview is flipped so the applicant sees a mirror; `capture()` deliberately
 does not flip. The server matches these frames against a document photo, and a
 mirrored face is a different face to a matcher.
+
+## Testing it by hand
+
+```bash
+pnpm --filter @kyciris/web playground
+```
+
+Opens an HTTPS dev server with a fake challenge, so the camera, the pose
+extraction and the challenge machine can be exercised without a KYC backend.
+It prints the captured frames afterwards — those are the actual evidence the
+server judges, so being able to look at them is most of the point.
+
+### On a phone
+
+The server binds every interface, so use the **Network** URL it prints
+(`https://10.0.0.x:5180`) from a phone on the same wifi.
+
+HTTPS is not a nicety here. `getUserMedia` only works in a secure context;
+`localhost` counts as one, **a LAN address does not**. Over plain http a phone
+gets no camera at all, and the error it reports is a permission failure — which
+points nowhere near the cause. Hence the self-signed cert.
+
+Your phone will warn about that certificate. Accept it once; the camera prompt
+comes after.
+
+### What to check
+
+- **Front camera opens**, and the preview is mirrored.
+- **"turn left" responds to your actual left.** This is the one thing the test
+  suite cannot prove — it verifies the math is self-consistent, not that
+  MediaPipe's axes are what we assume. If left and right are swapped, flip
+  `mirrored` in `pose.ts` and re-run `challenge-integration.spec.ts`.
+- **The captured frames are NOT mirrored**, unlike the preview.
+- **Detection survives a dropout** — cover the camera briefly mid-challenge; the
+  prompt should hold rather than fail.
+- **The camera light goes out** when the challenge ends.

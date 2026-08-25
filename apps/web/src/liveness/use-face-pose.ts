@@ -63,6 +63,51 @@ export interface UseFacePoseResult {
   capture: () => string | null;
 }
 
+/**
+ * A phone, for the purpose of choosing camera constraints.
+ *
+ * User-agent sniffing, which is normally the wrong tool — but the thing being
+ * detected here IS the device class, and there is no feature query for "this
+ * camera is a portrait phone sensor". Touch support says nothing (touchscreen
+ * laptops) and screen width says nothing (a small window).
+ */
+const isPhone = (): boolean =>
+  typeof navigator !== 'undefined' &&
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+/**
+ * getUserMedia constraints, front camera.
+ *
+ * Mobile and desktop are asked for different things on purpose. Requesting a
+ * landscape 1280x720 from a phone held upright makes the browser pick a mode
+ * that then arrives rotated or letterboxed — the face ends up small and
+ * off-centre in the frame, which costs detection accuracy for no benefit. Phones
+ * get a resolution they can serve natively in portrait and are left to choose
+ * the rest.
+ *
+ * `facingMode: 'user'` rather than a deviceId: this is a selfie check, the front
+ * camera is the only correct one, and enumerating devices needs a permission we
+ * have not been granted yet at this point.
+ */
+function cameraConstraints(): MediaStreamConstraints {
+  return {
+    audio: false,
+    video: isPhone()
+      ? {
+          facingMode: 'user',
+          width: { ideal: 720 },
+          height: { ideal: 1280 },
+          frameRate: { ideal: 30, max: 30 },
+        }
+      : {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30, max: 30 },
+        },
+  };
+}
+
 export function useFacePose({
   wasmPath = CDN_WASM,
   modelAssetPath = CDN_MODEL,
@@ -128,10 +173,9 @@ export function useFacePose({
         }
         landmarkerRef.current = landmarker;
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        });
+        const stream = await navigator.mediaDevices.getUserMedia(
+          cameraConstraints(),
+        );
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -141,7 +185,11 @@ export function useFacePose({
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = stream;
-        await video.play();
+        // iOS Safari rejects play() when the tab is not frontmost, and treats a
+        // rejected promise as fatal if unhandled. The stream is already
+        // attached, so a rejection here only means playback starts late — the
+        // detection loop skips frames until readyState catches up.
+        await video.play().catch(() => undefined);
         if (cancelled) return;
 
         setStatus('ready');

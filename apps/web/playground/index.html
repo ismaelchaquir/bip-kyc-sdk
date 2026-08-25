@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit + no user-scaling: the capture is a full-bleed camera view
+         and a pinch-zoom mid-challenge just moves the face out of frame. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+    />
+    <title>Liveness playground</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #0B0D12;
+        color: #fff;
+        font: 15px/1.5 system-ui, sans-serif;
+        display: flex;
+        justify-content: center;
+        padding: 16px;
+      }
+      #root { width: 100%; max-width: 460px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
