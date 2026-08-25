@@ -26,6 +26,29 @@ import { useFacePose, type UseFacePoseOptions } from './use-face-pose';
  * controls.
  */
 
+/**
+ * How long after the extreme the follow-up frame is taken.
+ *
+ * Short enough that it still lands inside the window where the pose crosses the
+ * threshold, long enough that the head has stopped moving and the frame is
+ * sharp. Matches the driver app.
+ */
+const FOLLOW_UP_FRAME_MS = 300;
+
+/**
+ * How centred the head must be for a frame to count as the neutral evidence.
+ *
+ * Deliberately tighter than both bars it sits between. The state machine leaves
+ * `returning` at NEUTRAL_THRESHOLD_DEG (12), but challenge_verifier.py accepts a
+ * neutral only within NEUTRAL_RETURN_DEG (10) — so a frame grabbed the instant
+ * the machine advances is already outside what the server will take. MediaPipe
+ * and insightface then disagree by another couple of degrees on the same head.
+ * A run that failed on exactly this produced neutrals the server read at 12.9
+ * and 14.3 degrees of yaw, with both movements detected and the pitch dead on.
+ * Seven leaves room for both gaps.
+ */
+export const NEUTRAL_CAPTURE_DEG = 7;
+
 export interface LivenessCaptureProps {
   /**
    * The server-issued challenge. The action sequence MUST come from the
@@ -65,12 +88,23 @@ export function LivenessCapture({
   const framesRef = useRef<string[]>([]);
   /** Guards onComplete/onFailed against a second call from a late frame. */
   const settledRef = useRef(false);
+  /** Pending follow-up capture, so it can be cancelled when the run ends. */
+  const followUpRef = useRef<number | null>(null);
+  /** One centred frame per action; reset when the next movement is captured. */
+  const centredCapturedRef = useRef(false);
 
   // Restart cleanly if the caller issues a new challenge (a retry).
   useEffect(() => {
     setState(createChallengeState(challenge.actions));
     framesRef.current = [];
     settledRef.current = false;
+    centredCapturedRef.current = false;
+    return () => {
+      if (followUpRef.current !== null) {
+        window.clearTimeout(followUpRef.current);
+        followUpRef.current = null;
+      }
+    };
   }, [challenge.id, challenge.actions]);
 
   const captureFrame = useCallback(() => {
@@ -78,6 +112,25 @@ export function LivenessCapture({
     if (frame) framesRef.current.push(frame);
     return frame;
   }, [capture]);
+
+  /**
+   * Two frames at the extreme, a moment apart.
+   *
+   * One still gives a single attempt at a window of roughly a second, and loses
+   * it to motion blur often enough to reject someone who performed the movement
+   * correctly — the frame is grabbed at the instant the head is moving fastest.
+   * The follow-up lands nearer the peak, where the head has usually settled.
+   * The driver app takes the same two for the same reason.
+   */
+  const captureMovement = useCallback(() => {
+    centredCapturedRef.current = false;
+    const first = captureFrame();
+    followUpRef.current = window.setTimeout(
+      () => captureFrame(),
+      FOLLOW_UP_FRAME_MS,
+    );
+    return first;
+  }, [captureFrame]);
 
   // Drive the machine from the pose stream.
   useEffect(() => {
@@ -87,11 +140,10 @@ export function LivenessCapture({
       const next = advance(current, pose);
       if (next === current) return current;
 
-      // A frame per completed action, taken at the moment the pose satisfied
-      // it — that is the evidence the server re-derives pose from, so it has to
-      // be the frame where the movement actually happened, not a later one.
+      // At the extreme: the frames whose pose actually crosses the threshold,
+      // which is what the server re-derives the movement from.
       if (next.phase === 'returning' && current.phase === 'awaiting_action') {
-        if (!captureFrame()) {
+        if (!captureMovement()) {
           return {
             ...next,
             phase: 'failed' as const,
@@ -99,8 +151,41 @@ export function LivenessCapture({
           };
         }
       }
+
+      // At the machine's return to centre. A fallback for the neutral evidence,
+      // not the evidence itself: this fires the moment the pose clears 12
+      // degrees, which the server may well read as more than the 10 it accepts.
+      // The effect below is what actually lands a usable neutral; this stays
+      // because a run where the head never settles inside NEUTRAL_CAPTURE_DEG
+      // is better off offering a marginal frame than none at all.
+      if (current.phase === 'returning' && next.phase !== 'returning') {
+        captureFrame();
+      }
+
       return next;
     });
+  }, [pose, status, captureFrame, captureMovement]);
+
+  // The neutral evidence, taken independently of the machine's phase.
+  //
+  // challenge_verifier.py requires at least one frame within NEUTRAL_RETURN_DEG
+  // on both axes — a print held at a fixed angle can satisfy "turn left" but can
+  // never also be neutral, so this is what separates a real head from a photo.
+  // Keying it off the pose rather than the phase is what makes it reliable: the
+  // head is squarely centred before the first prompt and again as it swings
+  // through centre between two opposite turns, and those moments are well
+  // inside the server's bar. The phase transition is not.
+  useEffect(() => {
+    if (status !== 'ready' || settledRef.current || !pose) return;
+    if (centredCapturedRef.current) return;
+    if (
+      Math.abs(pose.yaw) > NEUTRAL_CAPTURE_DEG ||
+      Math.abs(pose.pitch) > NEUTRAL_CAPTURE_DEG
+    ) {
+      return;
+    }
+    centredCapturedRef.current = true;
+    captureFrame();
   }, [pose, status, captureFrame]);
 
   // Settle once, outside the reducer, so the callbacks are never called twice.
@@ -109,8 +194,18 @@ export function LivenessCapture({
 
     if (state.phase === 'done') {
       settledRef.current = true;
+      // A pending follow-up would otherwise push into the array after the
+      // caller already has it — a capture nobody reads, mutating something
+      // being uploaded.
+      if (followUpRef.current !== null) {
+        window.clearTimeout(followUpRef.current);
+        followUpRef.current = null;
+      }
       onComplete({
-        frames: framesRef.current,
+        // A snapshot. framesRef keeps being written to on a retry, and handing
+        // out the live array makes the previous attempt's evidence change
+        // underneath whoever is uploading it.
+        frames: [...framesRef.current],
         report: {
           challengeId: challenge.id,
           actions: state.actions,
@@ -120,6 +215,10 @@ export function LivenessCapture({
       });
     } else if (state.phase === 'failed') {
       settledRef.current = true;
+      if (followUpRef.current !== null) {
+        window.clearTimeout(followUpRef.current);
+        followUpRef.current = null;
+      }
       onFailed?.(state.failureReason ?? 'failed');
     }
   }, [state, challenge.id, onComplete, onFailed]);

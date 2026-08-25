@@ -8,6 +8,7 @@ import {
   type LivenessAction,
 } from '@bipdelivery/core';
 import { poseFromMatrix } from './pose';
+import { NEUTRAL_CAPTURE_DEG } from './liveness-capture';
 
 /**
  * The seam between MediaPipe and the shared rules.
@@ -121,5 +122,92 @@ describe('MediaPipe pose driving the shared challenge machine', () => {
     const state = perform(['turn_left', 'turn_right'], [NEUTRAL, observe(-OVER), observe(-OVER)]);
     expect(state.phase).toBe('returning');
     expect(state.index).toBe(0);
+  });
+});
+
+/**
+ * Which frames the capture must collect.
+ *
+ * The server does not just re-derive the movements — challenge_verifier.py also
+ * requires at least one frame within NEUTRAL_RETURN_DEG on both axes, because a
+ * photo held at a fixed angle can satisfy "turn left" but can never also be
+ * neutral. Capturing only at the extremes produced a run where every movement
+ * was detected and the verification still failed with "Head never returned to a
+ * neutral pose".
+ *
+ * These assert the phase transitions the component captures on, which is the
+ * part that decides which frames exist.
+ */
+describe('frame capture points', () => {
+  const NEUTRAL_RETURN_DEG = 10;
+
+  it('the transition into `returning` marks the extreme', () => {
+    let now = 0;
+    let state = createChallengeState(['turn_left'], now);
+    state = advance(state, NEUTRAL, (now += 100));
+    const before = state.phase;
+    state = advance(state, observe(-OVER), (now += 100));
+
+    expect(before).toBe('awaiting_action');
+    expect(state.phase).toBe('returning');
+  });
+
+  it('the transition OUT of `returning` marks a fallback frame', () => {
+    let now = 0;
+    let state = createChallengeState(['turn_left', 'turn_right'], now);
+    state = advance(state, NEUTRAL, (now += 100));
+    state = advance(state, observe(-OVER), (now += 100));
+    expect(state.phase).toBe('returning');
+
+    state = advance(state, NEUTRAL, (now += 100));
+    expect(state.phase).not.toBe('returning');
+  });
+
+  /**
+   * Why that transition is NOT the neutral evidence.
+   *
+   * The machine releases at the first pose inside NEUTRAL_THRESHOLD_DEG, and a
+   * head still swinging back clears 12 degrees well before it reaches centre.
+   * The server accepts a neutral only within 10. A real run failed here: both
+   * movements detected, pitch dead on, and the two neutral frames read by the
+   * server at 12.85 and 14.25 degrees of yaw.
+   */
+  it('a pose the machine calls neutral can still be too turned for the server', () => {
+    const atRelease = observe(NEUTRAL_THRESHOLD_DEG - 0.1);
+
+    let now = 0;
+    let state = createChallengeState(['turn_left'], now);
+    state = advance(state, NEUTRAL, (now += 100));
+    state = advance(state, observe(-OVER), (now += 100));
+    state = advance(state, atRelease, (now += 100));
+
+    expect(state.phase).not.toBe('returning');
+    expect(Math.abs(atRelease.yaw)).toBeGreaterThan(NEUTRAL_RETURN_DEG);
+  });
+
+  // So the component captures on the pose instead, at a bar tight enough that
+  // the server still accepts the frame after the two models disagree on it.
+  it('NEUTRAL_CAPTURE_DEG leaves the server margin the release bar does not', () => {
+    expect(NEUTRAL_CAPTURE_DEG).toBeLessThan(NEUTRAL_RETURN_DEG);
+    expect(NEUTRAL_CAPTURE_DEG).toBeLessThan(NEUTRAL_THRESHOLD_DEG);
+
+    const captured = observe(NEUTRAL_CAPTURE_DEG, NEUTRAL_CAPTURE_DEG);
+    expect(Math.abs(captured.yaw)).toBeLessThanOrEqual(NEUTRAL_CAPTURE_DEG + 0.01);
+    expect(Math.abs(captured.pitch)).toBeLessThanOrEqual(NEUTRAL_CAPTURE_DEG + 0.01);
+  });
+
+  // The last action leaves `returning` for `done`, not for another action — so
+  // a condition written as "moved to the next action" would miss the neutral
+  // frame on the final movement, which is the only one on a one-action
+  // challenge.
+  it('leaves `returning` on the FINAL action too', () => {
+    let now = 0;
+    let state = createChallengeState(['turn_left'], now);
+    state = advance(state, NEUTRAL, (now += 100));
+    state = advance(state, observe(-OVER), (now += 100));
+    expect(state.phase).toBe('returning');
+
+    state = advance(state, NEUTRAL, (now += 100));
+    expect(state.phase).toBe('done');
   });
 });
