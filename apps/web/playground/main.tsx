@@ -127,15 +127,17 @@ function App() {
   );
 
   const submit = useCallback(
-    async (evidence: LivenessEvidence) => {
+    async (evidence: LivenessEvidence, selfie: string) => {
       if (!client || !session) return;
       setPhase({ kind: 'uploading' });
       try {
         await client.uploadSelfie({
           verificationId: session.verificationId,
-          // The first frame is the selfie of record; the rest ride along as
-          // evidence. The server re-derives pose from all of them.
-          imageData: evidence.frames[0],
+          // The straightest frame the capture saw, chosen by it — not
+          // frames[0], which is the first extreme of the first movement. All
+          // the frames still ride along as evidence and the server re-derives
+          // pose from every one of them.
+          imageData: selfie,
           liveness: evidence,
         });
         setPhase({ kind: 'done', frames: evidence.frames.length });

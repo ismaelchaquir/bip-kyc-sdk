@@ -57,7 +57,17 @@ export interface LivenessCaptureProps {
    */
   challenge: LivenessChallenge;
   /** Called once the applicant completes every action. */
-  onComplete: (evidence: LivenessEvidence) => void;
+  /**
+   * Called with the challenge evidence and, separately, the frame to upload as
+   * the selfie.
+   *
+   * The selfie is not just one of the frames: it is what face match embeds and
+   * what passive liveness scores, so it has to be the applicant looking at the
+   * camera. Taking `frames[0]` instead sent the first extreme of the first
+   * movement — a run uploaded a selfie at 31.8 degrees of yaw while a frame at
+   * 0.2 degrees sat unused later in the same array.
+   */
+  onComplete: (evidence: LivenessEvidence, selfie: string) => void;
   /** Called when the challenge fails — usually a timeout. Offer a retry. */
   onFailed?: (reason: string) => void;
   /** Model/WASM hosting. Self-host these for production; see useFacePose. */
@@ -92,6 +102,8 @@ export function LivenessCapture({
   const followUpRef = useRef<number | null>(null);
   /** One centred frame per action; reset when the next movement is captured. */
   const centredCapturedRef = useRef(false);
+  /** The most centred frame captured so far, and how far off centre it was. */
+  const bestNeutralRef = useRef<{ frame: string; deviation: number } | null>(null);
 
   // Restart cleanly if the caller issues a new challenge (a retry).
   useEffect(() => {
@@ -99,6 +111,7 @@ export function LivenessCapture({
     framesRef.current = [];
     settledRef.current = false;
     centredCapturedRef.current = false;
+    bestNeutralRef.current = null;
     return () => {
       if (followUpRef.current !== null) {
         window.clearTimeout(followUpRef.current);
@@ -185,7 +198,16 @@ export function LivenessCapture({
       return;
     }
     centredCapturedRef.current = true;
-    captureFrame();
+    const frame = captureFrame();
+    if (!frame) return;
+
+    // Keep the straightest one for the selfie. Every capture here is already
+    // inside NEUTRAL_CAPTURE_DEG, so this is choosing between good frames.
+    const deviation = Math.abs(pose.yaw) + Math.abs(pose.pitch);
+    const best = bestNeutralRef.current;
+    if (!best || deviation < best.deviation) {
+      bestNeutralRef.current = { frame, deviation };
+    }
   }, [pose, status, captureFrame]);
 
   // Settle once, outside the reducer, so the callbacks are never called twice.
@@ -201,18 +223,24 @@ export function LivenessCapture({
         window.clearTimeout(followUpRef.current);
         followUpRef.current = null;
       }
-      onComplete({
-        // A snapshot. framesRef keeps being written to on a retry, and handing
-        // out the live array makes the previous attempt's evidence change
-        // underneath whoever is uploading it.
-        frames: [...framesRef.current],
-        report: {
-          challengeId: challenge.id,
-          actions: state.actions,
-          passed: state.passed,
-          timingsMs: state.timingsMs,
+      onComplete(
+        {
+          // A snapshot. framesRef keeps being written to on a retry, and handing
+          // out the live array makes the previous attempt's evidence change
+          // underneath whoever is uploading it.
+          frames: [...framesRef.current],
+          report: {
+            challengeId: challenge.id,
+            actions: state.actions,
+            passed: state.passed,
+            timingsMs: state.timingsMs,
+          },
         },
-      });
+        // Falls back to the first frame only if no centred capture ever landed,
+        // which also means the run had no neutral evidence and the server was
+        // going to reject it anyway.
+        bestNeutralRef.current?.frame ?? framesRef.current[0],
+      );
     } else if (state.phase === 'failed') {
       settledRef.current = true;
       if (followUpRef.current !== null) {
