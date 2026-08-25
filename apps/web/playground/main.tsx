@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   createKYCClient,
@@ -6,6 +6,7 @@ import {
   type LivenessEvidence,
 } from '@bipdelivery/core';
 import { LivenessCapture } from '../src/liveness/liveness-capture';
+import { DocumentStep } from './document-step';
 
 /**
  * Hosted liveness test page.
@@ -48,8 +49,16 @@ function readSession(): Session | null {
   return token && verificationId ? { token, verificationId } : null;
 }
 
+/**
+ * The project's flow is `document_liveness`, so the page walks both steps in
+ * that order — the same order the driver app uses, and the order the gateway
+ * expects: a liveness selfie with no document behind it has nothing to be
+ * matched against.
+ */
 type Phase =
   | { kind: 'no-session' }
+  | { kind: 'doc-front' }
+  | { kind: 'doc-back' }
   | { kind: 'requesting' }
   | { kind: 'challenge'; challenge: LivenessChallenge }
   | { kind: 'uploading' }
@@ -59,8 +68,9 @@ type Phase =
 function App() {
   const session = useMemo(readSession, []);
   const [phase, setPhase] = useState<Phase>(
-    session ? { kind: 'requesting' } : { kind: 'no-session' },
+    session ? { kind: 'doc-front' } : { kind: 'no-session' },
   );
+  const [busy, setBusy] = useState(false);
 
   /**
    * One client for the page's lifetime. `createVerificationToken` is never
@@ -89,9 +99,32 @@ function App() {
     }
   }, [client, session]);
 
-  useEffect(() => {
-    if (session) requestChallenge();
-  }, [session, requestChallenge]);
+  const uploadDoc = useCallback(
+    async (type: 'front' | 'back', imageData: string, next: Phase) => {
+      if (!client || !session) return;
+      setBusy(true);
+      try {
+        await client.uploadDocument({
+          verificationId: session.verificationId,
+          type,
+          imageData,
+        });
+        setBusy(false);
+        setPhase(next);
+        // The challenge is requested only once the documents are in, because it
+        // expires in two minutes — asking for it earlier means it is dead
+        // before the applicant has finished photographing their ID.
+        if (next.kind === 'requesting') requestChallenge();
+      } catch (err) {
+        setBusy(false);
+        setPhase({
+          kind: 'error',
+          message: err instanceof Error ? err.message : `Could not upload the ${type}`,
+        });
+      }
+    },
+    [client, session, requestChallenge],
+  );
 
   const submit = useCallback(
     async (evidence: LivenessEvidence) => {
@@ -142,6 +175,24 @@ function App() {
         {API_BASE} · {session!.verificationId}
       </p>
 
+      {phase.kind === 'doc-front' && (
+        <DocumentStep
+          label="Front of your ID"
+          hint="Fill the frame, avoid glare, and keep all four corners visible."
+          busy={busy}
+          onCaptured={(img) => uploadDoc('front', img, { kind: 'doc-back' })}
+        />
+      )}
+
+      {phase.kind === 'doc-back' && (
+        <DocumentStep
+          label="Back of your ID"
+          hint="The side with the machine-readable lines, if it has them."
+          busy={busy}
+          onCaptured={(img) => uploadDoc('back', img, { kind: 'requesting' })}
+        />
+      )}
+
       {phase.kind === 'requesting' && <p>Requesting a challenge…</p>}
 
       {phase.kind === 'challenge' && (
@@ -176,11 +227,11 @@ function App() {
       )}
 
       {(phase.kind === 'done' || phase.kind === 'error') && (
-        <button onClick={requestChallenge} style={button}>
+        <button onClick={() => setPhase({ kind: 'doc-front' })} style={button}>
           {/* A NEW challenge, never a retry of the old one: re-requesting draws
               a fresh random sequence, which is what stops someone retrying
               until they draw one they have a recording of. */}
-          Try another challenge
+          Start over
         </button>
       )}
     </main>

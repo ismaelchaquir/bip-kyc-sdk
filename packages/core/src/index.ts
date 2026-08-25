@@ -417,8 +417,17 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
  * as fields. React Native's stack does not do this for us, so it keeps the
  * explicit header.
  */
-function multipartHeaders(): Record<string, string> {
-  return isBrowser() ? {} : { 'Content-Type': 'multipart/form-data' };
+function multipartHeaders(): Record<string, string | undefined> {
+  // `undefined`, not `{}`. Axios MERGES per-request headers over the instance
+  // defaults, and this client defaults to 'application/json' — so an empty
+  // object leaves that in place and the upload goes out as JSON carrying a
+  // FormData body. The server then finds no multipart and answers "File is
+  // required", which is how this looked from the outside. Explicitly undefined
+  // is what removes the header so the browser can set its own with the
+  // boundary.
+  return isBrowser()
+    ? { 'Content-Type': undefined }
+    : { 'Content-Type': 'multipart/form-data' };
 }
 
 export class KYCCore {
@@ -694,27 +703,15 @@ export class KYCCore {
       formData.append('type', params.type);
 
       const mimeType = params.mimeType || 'image/jpeg';
-      const imageData = params.imageData;
-
-      if (imageData.startsWith('file://')) {
-        formData.append('file', {
-          uri: imageData,
-          type: mimeType,
-          name: `${params.type}.jpg`,
-        } as any);
-      } else if (imageData.startsWith('data:')) {
-        formData.append('file', {
-          uri: imageData,
-          type: mimeType,
-          name: `${params.type}.jpg`,
-        } as any);
-      } else {
-        formData.append('file', {
-          uri: `data:${mimeType};base64,${imageData}`,
-          type: mimeType,
-          name: `${params.type}.jpg`,
-        } as any);
-      }
+      // Same three inlined RN-only branches as faceMatchVerification had, with
+      // the same browser bug; through the shared helper now.
+      this.appendImage(
+        formData,
+        'file',
+        params.imageData,
+        mimeType,
+        `${params.type}.jpg`,
+      );
 
       const response = await this.client.post('/verification/upload/document', formData, {
         headers: multipartHeaders(),
