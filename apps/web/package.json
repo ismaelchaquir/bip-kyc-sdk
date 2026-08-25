@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run",
-    "playground": "vite"
+    "playground": "vite",
+    "playground:build": "vite build"
   },
   "peerDependencies": {
     "react": "^18.0.0",

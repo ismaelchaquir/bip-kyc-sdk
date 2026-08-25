@@ -18,6 +18,14 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
  */
 export default defineConfig({
   root: 'playground',
+  // Served under a path on the existing kyc host rather than its own subdomain,
+  // so no new DNS record is needed. Vite has to know, or every asset URL comes
+  // out absolute-from-root and 404s.
+  base: '/liveness/',
+  build: {
+    outDir: '../playground-dist',
+    emptyOutDir: true,
+  },
   plugins: [react(), basicSsl()],
   server: {
     // Bind every interface so a phone on the same wifi can reach it.

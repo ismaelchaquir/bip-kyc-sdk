@@ -1,154 +1,217 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { LivenessAction, LivenessChallenge, LivenessEvidence } from '@bipdelivery/core';
+import {
+  createKYCClient,
+  type LivenessChallenge,
+  type LivenessEvidence,
+} from '@bipdelivery/core';
 import { LivenessCapture } from '../src/liveness/liveness-capture';
 
 /**
- * Manual test harness for the liveness capture.
+ * Hosted liveness test page.
  *
- * Fakes the one thing that must come from a server in production — the
- * challenge — so the camera, the pose extraction and the challenge machine can
- * be exercised without a KYC backend. Everything below the challenge is the
- * real code path.
+ * Runs the real thing: a real challenge from the real gateway, real frames
+ * uploaded back to it. Nothing here is faked, which is the point — a challenge
+ * invented in the browser proves the camera works and nothing about whether the
+ * server agrees, and the server disagreeing is the failure that matters.
  *
- * A real client calls `KYCClient.createLivenessChallenge(verificationId)`; a
- * client that picks its own sequence offers no replay protection, which is why
- * this is a playground and not an example to copy.
+ * THE API KEY IS NOT HERE, AND MUST NOT BE. This page is served publicly, so
+ * anything in its bundle is readable by anyone who finds the URL, and the
+ * project API key is project-wide and long-lived — it can start verifications,
+ * read them, and mint tokens for any applicant. `POST /verification/token` is
+ * guarded by ApiKeyOnlyGuard precisely so that minting happens off the client.
+ *
+ * Instead the page is handed a VERIFICATION TOKEN: short-lived (hours), scoped
+ * to one verification, and enough for exactly the two calls this flow makes.
+ * `scripts/new-liveness-session.sh` mints one and prints the URL to open.
+ *
+ * The session arrives in the URL **hash**, not the query string. A hash is
+ * never sent to the server, so it stays out of access logs, and it is not
+ * forwarded in the Referer header to anything the page loads.
  */
 
-const ALL_ACTIONS: LivenessAction[] = ['turn_left', 'turn_right', 'look_up', 'look_down'];
+const API_BASE =
+  import.meta.env.VITE_KYC_API_BASE ?? 'https://api.kyc.bipdelivery.com';
 
-function fakeChallenge(actions: LivenessAction[]): LivenessChallenge {
-  return {
-    id: `local-${Date.now()}`,
-    actions,
-    issuedAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
-  };
+interface Session {
+  token: string;
+  verificationId: string;
 }
 
+/** `#token=…&verificationId=…`, as the session script emits it. */
+function readSession(): Session | null {
+  const hash = window.location.hash.replace(/^#/, '');
+  if (!hash) return null;
+  const params = new URLSearchParams(hash);
+  const token = params.get('token');
+  const verificationId = params.get('verificationId');
+  return token && verificationId ? { token, verificationId } : null;
+}
+
+type Phase =
+  | { kind: 'no-session' }
+  | { kind: 'requesting' }
+  | { kind: 'challenge'; challenge: LivenessChallenge }
+  | { kind: 'uploading' }
+  | { kind: 'done'; frames: number }
+  | { kind: 'error'; message: string };
+
 function App() {
-  const [actions, setActions] = useState<LivenessAction[]>(['turn_left', 'turn_right']);
-  const [challenge, setChallenge] = useState<LivenessChallenge | null>(null);
-  const [result, setResult] = useState<
-    { ok: true; evidence: LivenessEvidence } | { ok: false; reason: string } | null
-  >(null);
+  const session = useMemo(readSession, []);
+  const [phase, setPhase] = useState<Phase>(
+    session ? { kind: 'requesting' } : { kind: 'no-session' },
+  );
 
-  const start = useCallback(() => {
-    setResult(null);
-    setChallenge(fakeChallenge(actions));
-  }, [actions]);
+  /**
+   * One client for the page's lifetime. `createVerificationToken` is never
+   * called — the token is injected directly, because minting it needs the API
+   * key this page deliberately does not have.
+   */
+  const client = useMemo(() => {
+    if (!session) return null;
+    const c = createKYCClient({ apiKey: '', baseUrl: API_BASE });
+    (c as unknown as { verificationToken: string }).verificationToken =
+      session.token;
+    return c;
+  }, [session]);
 
-  const toggle = (action: LivenessAction) =>
-    setActions((current) =>
-      current.includes(action)
-        ? current.filter((a) => a !== action)
-        : [...current, action],
+  const requestChallenge = useCallback(async () => {
+    if (!client || !session) return;
+    setPhase({ kind: 'requesting' });
+    try {
+      const challenge = await client.createLivenessChallenge(session.verificationId);
+      setPhase({ kind: 'challenge', challenge });
+    } catch (err) {
+      setPhase({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Could not get a challenge',
+      });
+    }
+  }, [client, session]);
+
+  useEffect(() => {
+    if (session) requestChallenge();
+  }, [session, requestChallenge]);
+
+  const submit = useCallback(
+    async (evidence: LivenessEvidence) => {
+      if (!client || !session) return;
+      setPhase({ kind: 'uploading' });
+      try {
+        await client.uploadSelfie({
+          verificationId: session.verificationId,
+          // The first frame is the selfie of record; the rest ride along as
+          // evidence. The server re-derives pose from all of them.
+          imageData: evidence.frames[0],
+          liveness: evidence,
+        });
+        setPhase({ kind: 'done', frames: evidence.frames.length });
+      } catch (err) {
+        setPhase({
+          kind: 'error',
+          message: err instanceof Error ? err.message : 'Upload failed',
+        });
+      }
+    },
+    [client, session],
+  );
+
+  if (phase.kind === 'no-session') {
+    return (
+      <main>
+        <h1 style={{ fontSize: 18 }}>Liveness test</h1>
+        <p style={{ opacity: 0.75, fontSize: 14 }}>
+          This page needs a verification session. Mint one and open the URL it
+          prints:
+        </p>
+        <pre style={code}>
+          ./scripts/new-liveness-session.sh
+        </pre>
+        <p style={{ opacity: 0.55, fontSize: 12 }}>
+          The session goes in the URL hash. It is short-lived and scoped to a
+          single verification — the project API key stays on the server.
+        </p>
+      </main>
     );
-
-  const summary = useMemo(() => {
-    if (!result) return null;
-    if (!result.ok) return `FAILED — ${result.reason}`;
-    const { report, frames } = result.evidence;
-    return [
-      `PASSED`,
-      `frames captured: ${frames.length}`,
-      `actions: ${report.actions.join(' → ')}`,
-      `timings (ms): ${report.timingsMs?.join(', ') ?? '—'}`,
-    ].join('\n');
-  }, [result]);
+  }
 
   return (
     <main>
-      <h1 style={{ fontSize: 18 }}>Liveness playground</h1>
+      <h1 style={{ fontSize: 18 }}>Liveness test</h1>
+      <p style={{ opacity: 0.6, fontSize: 12, wordBreak: 'break-all' }}>
+        {API_BASE} · {session!.verificationId}
+      </p>
 
-      {!challenge && (
-        <>
-          <p style={{ opacity: 0.7, fontSize: 13 }}>
-            Pick the movements, then start. The challenge is faked locally — in
-            production it comes from the server.
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '12px 0' }}>
-            {ALL_ACTIONS.map((action) => (
-              <button
-                key={action}
-                onClick={() => toggle(action)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,.2)',
-                  background: actions.includes(action) ? '#F5C33B' : 'transparent',
-                  color: actions.includes(action) ? '#000' : '#fff',
-                  font: 'inherit',
-                  cursor: 'pointer',
-                }}
-              >
-                {action.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={start}
-            disabled={actions.length === 0}
-            style={{
-              width: '100%',
-              padding: 14,
-              borderRadius: 12,
-              border: 0,
-              background: '#F5C33B',
-              font: 'inherit',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Start challenge
-          </button>
-        </>
-      )}
+      {phase.kind === 'requesting' && <p>Requesting a challenge…</p>}
 
-      {challenge && (
+      {phase.kind === 'challenge' && (
         <LivenessCapture
-          key={challenge.id}
-          challenge={challenge}
-          onComplete={(evidence) => {
-            setResult({ ok: true, evidence });
-            setChallenge(null);
-          }}
-          onFailed={(reason) => {
-            setResult({ ok: false, reason });
-            setChallenge(null);
-          }}
-          // Point these at self-hosted copies to test the production path;
-          // unset they fall back to the CDN. See LIVENESS.md.
-          // detector={{ wasmPath: '/mediapipe/wasm', modelAssetPath: '/mediapipe/face_landmarker.task' }}
+          key={phase.challenge.id}
+          challenge={phase.challenge}
+          onComplete={submit}
+          onFailed={(reason) =>
+            setPhase({ kind: 'error', message: `Challenge failed: ${reason}` })
+          }
         />
       )}
 
-      {summary && (
-        <pre
-          style={{
-            whiteSpace: 'pre-wrap',
-            background: 'rgba(255,255,255,.06)',
-            padding: 12,
-            borderRadius: 12,
-            fontSize: 13,
-          }}
-        >
-          {summary}
-        </pre>
+      {phase.kind === 'uploading' && <p>Uploading frames…</p>}
+
+      {phase.kind === 'done' && (
+        <div style={box}>
+          <strong>Submitted.</strong>
+          <p style={{ margin: '6px 0 0', fontSize: 13 }}>
+            {phase.frames} frame{phase.frames === 1 ? '' : 's'} uploaded. The
+            server scores it — check the KYC dashboard for the verdict, which is
+            the only one that counts.
+          </p>
+        </div>
       )}
 
-      {/* The frames are the actual evidence the server judges, so being able to
-          look at them is most of the point of testing this by hand. */}
-      {result?.ok && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {result.evidence.frames.map((frame, i) => (
-            <img key={i} src={frame} alt={`frame ${i + 1}`} style={{ width: 100, borderRadius: 8 }} />
-          ))}
+      {phase.kind === 'error' && (
+        <div style={{ ...box, borderColor: '#f87171' }}>
+          <strong style={{ color: '#f87171' }}>Error</strong>
+          <p style={{ margin: '6px 0 0', fontSize: 13 }}>{phase.message}</p>
         </div>
+      )}
+
+      {(phase.kind === 'done' || phase.kind === 'error') && (
+        <button onClick={requestChallenge} style={button}>
+          {/* A NEW challenge, never a retry of the old one: re-requesting draws
+              a fresh random sequence, which is what stops someone retrying
+              until they draw one they have a recording of. */}
+          Try another challenge
+        </button>
       )}
     </main>
   );
 }
+
+const code: React.CSSProperties = {
+  background: 'rgba(255,255,255,.06)',
+  padding: 12,
+  borderRadius: 10,
+  fontSize: 13,
+  overflowX: 'auto',
+};
+
+const box: React.CSSProperties = {
+  border: '1px solid rgba(255,255,255,.15)',
+  borderRadius: 12,
+  padding: 14,
+  marginTop: 12,
+};
+
+const button: React.CSSProperties = {
+  width: '100%',
+  marginTop: 12,
+  padding: 14,
+  borderRadius: 12,
+  border: 0,
+  background: '#F5C33B',
+  font: 'inherit',
+  fontWeight: 600,
+  cursor: 'pointer',
+};
 
 createRoot(document.getElementById('root')!).render(<App />);
