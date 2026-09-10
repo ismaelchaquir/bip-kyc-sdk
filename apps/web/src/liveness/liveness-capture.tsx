@@ -8,6 +8,12 @@ import {
   type LivenessEvidence,
 } from '@bipdelivery/core';
 import { useFacePose, type UseFacePoseOptions } from './use-face-pose';
+import {
+  assessPortrait,
+  PORTRAIT_GUIDANCE,
+  SHARPNESS_SAMPLE_WIDTH,
+  sharpnessOf,
+} from './portrait-quality';
 
 /**
  * Active-liveness capture for the browser.
@@ -75,6 +81,19 @@ export interface LivenessCaptureProps {
   className?: string;
 }
 
+/**
+ * How long the frame must stay acceptable before the portrait is taken.
+ *
+ * A single good frame is easy to hit in passing — the head sweeps through
+ * centre on its way somewhere else. Holding the gate for this long is what
+ * makes it a deliberate pose rather than a lucky sample, and it is also what
+ * stops the countdown flickering on and off while somebody settles.
+ */
+const PORTRAIT_HOLD_MS = 700;
+
+/** How often the sharpness of the live frame is sampled. */
+const SHARPNESS_SAMPLE_MS = 200;
+
 export function LivenessCapture({
   challenge,
   onComplete,
@@ -82,7 +101,7 @@ export function LivenessCapture({
   detector,
   className,
 }: LivenessCaptureProps) {
-  const { videoRef, status, pose, error, capture } = useFacePose(detector);
+  const { videoRef, status, pose, framing, error, capture } = useFacePose(detector);
 
   const [state, setState] = useState<ChallengeState>(() =>
     createChallengeState(challenge.actions),
@@ -98,6 +117,26 @@ export function LivenessCapture({
   const framesRef = useRef<string[]>([]);
   /** Guards onComplete/onFailed against a second call from a late frame. */
   const settledRef = useRef(false);
+
+  /**
+   * The straight-on portrait, taken before the challenge begins.
+   *
+   * This is the frame face match embeds and passive liveness scores, so it is
+   * captured deliberately rather than salvaged from the movement sequence. It
+   * also gates the run: an applicant whose face the camera cannot see is told
+   * so in two seconds, instead of completing both movements and having the
+   * upload come back "no face detected in the selfie" — which is what happened
+   * to a real applicant.
+   *
+   * It is NOT a third challenge. The server issues and verifies the two
+   * movements; this adds no anti-spoof evidence of its own, and the binding
+   * between it and the challenge is checked server-side by comparing its face
+   * against the frames.
+   */
+  const portraitRef = useRef<string | null>(null);
+  const [portraitTaken, setPortraitTaken] = useState(false);
+  const [sharpness, setSharpness] = useState<number | null>(null);
+  const holdSinceRef = useRef<number | null>(null);
   /** Pending follow-up capture, so it can be cancelled when the run ends. */
   const followUpRef = useRef<number | null>(null);
   /** One centred frame per action; reset when the next movement is captured. */
@@ -112,6 +151,9 @@ export function LivenessCapture({
     settledRef.current = false;
     centredCapturedRef.current = false;
     bestNeutralRef.current = null;
+    portraitRef.current = null;
+    holdSinceRef.current = null;
+    setPortraitTaken(false);
     return () => {
       if (followUpRef.current !== null) {
         window.clearTimeout(followUpRef.current);
@@ -145,9 +187,71 @@ export function LivenessCapture({
     return first;
   }, [captureFrame]);
 
+  // Sample sharpness on its own cadence. Reading pixels back off the GPU is
+  // far too expensive to do on every animation frame, and blur does not change
+  // faster than this anyway.
+  useEffect(() => {
+    if (portraitTaken || status !== 'ready') return;
+
+    const canvas = document.createElement('canvas');
+    const timer = window.setInterval(() => {
+      const video = videoRef.current;
+      if (!video?.videoWidth) return;
+
+      const width = SHARPNESS_SAMPLE_WIDTH;
+      const height = Math.max(
+        1,
+        Math.round((video.videoHeight / video.videoWidth) * width),
+      );
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+
+      ctx.drawImage(video, 0, 0, width, height);
+      setSharpness(sharpnessOf(ctx.getImageData(0, 0, width, height)));
+    }, SHARPNESS_SAMPLE_MS);
+
+    return () => window.clearInterval(timer);
+  }, [portraitTaken, status, videoRef]);
+
+  const assessment = portraitTaken
+    ? null
+    : assessPortrait(pose, framing, sharpness);
+
+  // Take the portrait once the frame has been good for long enough.
+  useEffect(() => {
+    if (portraitTaken || status !== 'ready' || !assessment) return;
+
+    if (!assessment.ok) {
+      holdSinceRef.current = null;
+      return;
+    }
+
+    const now = performance.now();
+    if (holdSinceRef.current === null) {
+      holdSinceRef.current = now;
+      return;
+    }
+    if (now - holdSinceRef.current < PORTRAIT_HOLD_MS) return;
+
+    const frame = capture();
+    if (!frame) return;
+
+    portraitRef.current = frame;
+    // First in the evidence as well as being the selfie. The server compares
+    // the selfie against these frames, and a genuine session's portrait is the
+    // strongest match in the set.
+    framesRef.current.push(frame);
+    setPortraitTaken(true);
+  }, [assessment, capture, portraitTaken, status]);
+
   // Drive the machine from the pose stream.
   useEffect(() => {
     if (status !== 'ready' || settledRef.current) return;
+    // The challenge does not start until there is a portrait to bind it to.
+    if (!portraitTaken) return;
 
     setState((current) => {
       const next = advance(current, pose);
@@ -190,7 +294,7 @@ export function LivenessCapture({
   // inside the server's bar. The phase transition is not.
   useEffect(() => {
     if (status !== 'ready' || settledRef.current || !pose) return;
-    if (centredCapturedRef.current) return;
+    if (!portraitTaken || centredCapturedRef.current) return;
     if (
       Math.abs(pose.yaw) > NEUTRAL_CAPTURE_DEG ||
       Math.abs(pose.pitch) > NEUTRAL_CAPTURE_DEG
@@ -236,10 +340,12 @@ export function LivenessCapture({
             timingsMs: state.timingsMs,
           },
         },
-        // Falls back to the first frame only if no centred capture ever landed,
-        // which also means the run had no neutral evidence and the server was
-        // going to reject it anyway.
-        bestNeutralRef.current?.frame ?? framesRef.current[0],
+        // The deliberate portrait, which is the whole point of taking one.
+        // The centred challenge frame remains the fallback for a client that
+        // somehow reached the challenge without one.
+        portraitRef.current ??
+          bestNeutralRef.current?.frame ??
+          framesRef.current[0],
       );
     } else if (state.phase === 'failed') {
       settledRef.current = true;
@@ -252,14 +358,22 @@ export function LivenessCapture({
   }, [state, challenge.id, onComplete, onFailed]);
 
   const prompt =
-    status === 'ready'
-      ? promptFor(state)
-      : status === 'loading'
+    status !== 'ready'
+      ? status === 'loading'
         ? 'Starting the camera…'
-        : (error ?? 'The camera is unavailable');
+        : (error ?? 'The camera is unavailable')
+      : !portraitTaken
+        ? assessment?.ok
+          ? 'Hold still…'
+          : (PORTRAIT_GUIDANCE[assessment!.problem!] ??
+             'Look straight at the camera')
+        : promptFor(state);
 
   return (
-    <div className={className} data-liveness-phase={state.phase}>
+    <div
+      className={className}
+      data-liveness-phase={portraitTaken ? state.phase : 'portrait'}
+    >
       <div style={{ position: 'relative' }}>
         <video
           ref={videoRef}
@@ -284,6 +398,17 @@ export function LivenessCapture({
             gap: 4,
           }}
         >
+          {/* The portrait is a step the applicant performs, so it gets a pip
+              like the movements do — otherwise the bar appears to sit still
+              through the first thing they are asked to do. */}
+          <span
+            style={{
+              flex: 1,
+              height: 3,
+              borderRadius: 2,
+              background: portraitTaken ? '#34D399' : '#F5C33B',
+            }}
+          />
           {state.actions.map((action, i) => (
             <span
               key={`${action}-${i}`}
@@ -291,8 +416,13 @@ export function LivenessCapture({
                 flex: 1,
                 height: 3,
                 borderRadius: 2,
-                background:
-                  i < state.index ? '#34D399' : i === state.index ? '#F5C33B' : 'rgba(255,255,255,.3)',
+                background: !portraitTaken
+                  ? 'rgba(255,255,255,.3)'
+                  : i < state.index
+                    ? '#34D399'
+                    : i === state.index
+                      ? '#F5C33B'
+                      : 'rgba(255,255,255,.3)',
               }}
             />
           ))}

@@ -52,11 +52,29 @@ const CDN_WASM =
 const CDN_MODEL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
+/** What the current frame looks like, for gating a deliberate capture. */
+export interface FaceFraming {
+  /**
+   * Width of the face across the frame, 0..1.
+   *
+   * The single most useful framing signal: too small and the recogniser has
+   * few pixels to embed, which is how a selfie ends up scoring 0.5 against its
+   * own document. Taken from the landmark spread rather than a detection box,
+   * because that is what MediaPipe gives us.
+   */
+  faceSpan: number;
+  /** Distance of the face centre from the frame centre, 0..1 per axis. */
+  offsetX: number;
+  offsetY: number;
+}
+
 export interface UseFacePoseResult {
   videoRef: React.RefObject<HTMLVideoElement>;
   status: FacePoseStatus;
   /** Latest pose, or null when no face is detected this frame. */
   pose: Pose | null;
+  /** Framing of the face this frame, or null when none is detected. */
+  framing: FaceFraming | null;
   /** Why status is 'error' / 'denied', for the UI to show. */
   error: string | null;
   /** Grab the current video frame as a JPEG data URI, for the evidence upload. */
@@ -108,6 +126,37 @@ function cameraConstraints(): MediaStreamConstraints {
   };
 }
 
+/**
+ * Face framing from the landmark cloud.
+ *
+ * MediaPipe reports landmarks normalised to the frame, so the spread across
+ * them IS the face's share of the picture — no detection box needed, and no
+ * dependence on the video's pixel dimensions.
+ */
+function framingOf(
+  landmarks: { x: number; y: number }[] | undefined,
+): FaceFraming | null {
+  if (!landmarks || landmarks.length === 0) return null;
+
+  let minX = 1;
+  let maxX = 0;
+  let minY = 1;
+  let maxY = 0;
+
+  for (const point of landmarks) {
+    if (point.x < minX) minX = point.x;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.y > maxY) maxY = point.y;
+  }
+
+  return {
+    faceSpan: maxX - minX,
+    offsetX: Math.abs((minX + maxX) / 2 - 0.5) * 2,
+    offsetY: Math.abs((minY + maxY) / 2 - 0.5) * 2,
+  };
+}
+
 export function useFacePose({
   wasmPath = CDN_WASM,
   modelAssetPath = CDN_MODEL,
@@ -125,6 +174,7 @@ export function useFacePose({
   const lastTimestampRef = useRef(-1);
 
   const [status, setStatus] = useState<FacePoseStatus>('loading');
+  const [framing, setFraming] = useState<FaceFraming | null>(null);
   const [pose, setPose] = useState<Pose | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -235,6 +285,7 @@ export function useFacePose({
       // null propagates deliberately: the challenge machine treats "no face" as
       // "hold position", which is the right response to a momentary dropout.
       setPose(next ? { yaw: next.yaw, pitch: next.pitch } : null);
+      setFraming(framingOf(result.faceLandmarks?.[0]));
     };
 
     start();
@@ -252,5 +303,5 @@ export function useFacePose({
     };
   }, [enabled, wasmPath, modelAssetPath]);
 
-  return { videoRef, status, pose, error, capture };
+  return { videoRef, status, pose, framing, error, capture };
 }
