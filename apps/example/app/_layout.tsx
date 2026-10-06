@@ -7,11 +7,14 @@ export default function RootLayout() {
       <StatusBar style="auto" />
       <Stack>
         <Stack.Screen name="index" options={{ title: 'BipDelivery KYC' }} />
-        <Stack.Screen name="token-step" options={{ title: 'Create Token' }} />
-        <Stack.Screen name="front-document" options={{ title: 'Front Document' }} />
-        <Stack.Screen name="back-document" options={{ title: 'Back Document' }} />
-        <Stack.Screen name="selfie-step" options={{ title: 'Selfie' }} />
-        <Stack.Screen name="verification-complete" options={{ title: 'Complete' }} />
+        {/* The capture screens are full-bleed camera views; a header over one
+            just covers the prompt the applicant is meant to read. */}
+        <Stack.Screen name="step-example" options={{ title: 'LivenessStep', headerShown: false }} />
+        <Stack.Screen
+          name="capture-example"
+          options={{ title: 'LivenessCapture', headerShown: false }}
+        />
+        <Stack.Screen name="core-example" options={{ title: 'Core + your UI', headerShown: false }} />
       </Stack>
     </>
   );
