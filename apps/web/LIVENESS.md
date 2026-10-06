@@ -5,7 +5,7 @@ perform head movements a server-issued challenge names, and the frames where
 they did so are submitted as evidence.
 
 ```tsx
-import { LivenessCapture } from '@kyciris/web';
+import { LivenessCapture } from '@bipdelivery/web';
 
 const challenge = await client.createLivenessChallenge(verificationId);
 
@@ -90,7 +90,7 @@ mirrored face is a different face to a matcher.
 ## Testing it by hand
 
 ```bash
-pnpm --filter @kyciris/web playground
+pnpm --filter @bipdelivery/web playground
 ```
 
 Opens an HTTPS dev server with a fake challenge, so the camera, the pose

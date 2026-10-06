@@ -32,8 +32,8 @@ export default {
   external: [
     'react',
     'react-dom',
-    // The workspace package name. This said '@bipkyc/core' — a name that has
-    // not existed since the rename — so rollup silently INLINED core and axios
+    // The workspace package name. This once held a package name that no longer
+    // existed after a rename, so rollup silently INLINED core and axios
     // into the bundle instead of leaving them as imports. A consumer using both
     // this SDK and @bipdelivery/core directly got two copies with two separate
     // module states.

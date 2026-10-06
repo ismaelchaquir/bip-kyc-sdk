@@ -1,6 +1,6 @@
 # @bipdelivery/core
 
-Core SDK package with UI-agnostic KYC (Know Your Customer) functions. Use this package if you want to build your own UI while leveraging Paytesy's verification services.
+Core SDK package with UI-agnostic KYC (Know Your Customer) functions. Use this package if you want to build your own UI while calling kyc-mz's verification API.
 
 ## Installation
 

@@ -9,6 +9,9 @@
     "src",
     "!src/**/*.spec.ts"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

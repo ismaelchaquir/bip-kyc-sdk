@@ -1,5 +1,5 @@
 {
-  "name": "@kyciris/kyc-sdk",
+  "name": "@bipdelivery/kyc-sdk",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -10,6 +10,7 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
+    "test": "turbo test && scripts/check-names.sh",
     "clean": "turbo clean",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
   },

@@ -6,7 +6,7 @@ import {
 
 export type DocumentType = 'IDENTITY_CARD' | 'DRIVING_LICENSE';
 
-export interface PaytesyKYCWebTheme {
+export interface KYCWebTheme {
   primaryColor?: string;
   backgroundColor?: string;
   textColor?: string;
@@ -14,7 +14,7 @@ export interface PaytesyKYCWebTheme {
 
 export type KYCLocale = 'en' | 'pt';
 
-export interface PaytesyKYCWebStrings {
+export interface KYCWebStrings {
   start?: string;
   selfieTitle?: string;
   selfieHint?: string;
@@ -33,22 +33,22 @@ export interface PaytesyKYCWebStrings {
   cameraError?: string;
 }
 
-export interface PaytesyKYCWebConfig {
+export interface KYCWebConfig {
   apiKey: string;
   baseUrl: string;
   documentType: DocumentType;
   country: string;
   externalUserId: string;
   locale?: KYCLocale;
-  theme?: PaytesyKYCWebTheme;
-  strings?: PaytesyKYCWebStrings;
+  theme?: KYCWebTheme;
+  strings?: KYCWebStrings;
   onStatusChanged?: (event: KYCStatusEvent) => void;
   onComplete?: (status: 'approved' | 'rejected' | 'error', error?: string) => void;
   onError?: (error: Error) => void;
 }
 
-export interface PaytesyKYCWebProps {
-  config: PaytesyKYCWebConfig;
+export interface KYCWebProps {
+  config: KYCWebConfig;
 }
 
 type Step =
@@ -59,7 +59,7 @@ type Step =
   | 'processing'
   | 'complete';
 
-const STRINGS: Record<KYCLocale, PaytesyKYCWebStrings> = {
+const STRINGS: Record<KYCLocale, KYCWebStrings> = {
   en: {
     start: 'Start verification',
     selfieTitle: 'Take a selfie',
@@ -98,7 +98,7 @@ const STRINGS: Record<KYCLocale, PaytesyKYCWebStrings> = {
   },
 };
 
-export function PaytesyKYCWeb({ config }: PaytesyKYCWebProps): React.ReactElement {
+export function KYCWeb({ config }: KYCWebProps): React.ReactElement {
   const locale = config.locale ?? 'en';
   const t = { ...STRINGS[locale], ...(config.strings ?? {}) };
   const theme = config.theme ?? {};
@@ -299,7 +299,7 @@ interface CameraStepProps {
   title: string;
   hint: string;
   overlay: 'face' | 'document';
-  strings: PaytesyKYCWebStrings;
+  strings: KYCWebStrings;
   onCapture: (dataUrl: string) => void | Promise<void>;
 }
 
@@ -501,7 +501,7 @@ function Overlay({ shape }: { shape: 'face' | 'document' }) {
   );
 }
 
-export default PaytesyKYCWeb;
+export default KYCWeb;
 
 /**
  * Active-liveness capture (MediaPipe).

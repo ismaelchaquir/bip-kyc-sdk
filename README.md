@@ -1,107 +1,44 @@
-# @kyciris/kyc-sdk
+# @bipdelivery KYC SDK
 
-A monorepo containing the Paytesy KYC SDK packages.
+Client packages for **kyc-mz**, the BipDelivery identity verification API:
+start a verification, capture the documents and the selfie, run the active
+liveness challenge, and follow the result.
 
 ## Packages
 
-- [`@bipkyc/core`](./packages/core/README.md) - Core SDK with UI-agnostic KYC functions
-- [`@kyciris/mobile`](./apps/mobile/README.md) - React Native mobile SDK with pre-built UI
-- `@kyciris/web` - Web SDK with pre-built UI
+| Package | For | What it is |
+|---|---|---|
+| [`@bipdelivery/core`](./packages/core/README.md) | Any JS runtime | The API client (sessions, uploads, status, resume) and the liveness challenge machine. No UI. Published on npm. |
+| [`@bipdelivery/react-native`](./packages/react-native/README.md) | React Native (bare or Expo dev build) | `LivenessCapture` and `LivenessStep` on VisionCamera. |
+| `@bipdelivery/web` | Browsers (React) | `KYCWeb`, the full web flow, and `LivenessCapture` on MediaPipe ([LIVENESS.md](./apps/web/LIVENESS.md)). |
+| [`@bipdelivery/example`](./apps/example/README.md) | — | Expo example app using core and react-native. Not published. |
 
-## Installation
+The rules that decide a verification live on the server. These packages coach
+the applicant and collect evidence; kyc-mz re-checks everything it receives.
+
+## Develop
 
 ```bash
 pnpm install
+pnpm build        # core first, then everything that depends on it
+pnpm typecheck
+pnpm test         # every package's tests, then the old-name guard
 ```
 
-## Development
+`pnpm test` ends with `scripts/check-names.sh`, which fails if a name this
+project no longer uses comes back into the source.
+
+## Use from an app in this repo, before publishing
+
+The driver app installs these packages as local tarballs:
 
 ```bash
-# Build all packages
-pnpm build
-
-# Run development mode
-pnpm dev
-
-# Run typecheck
-pnpm typecheck
-
-# Run linting
-pnpm lint
-
-# Clean build artifacts
-pnpm clean
+scripts/pack-local.sh
+cd ../driver && yarn upgrade @bipdelivery/core @bipdelivery/react-native
 ```
 
-## Usage
+Why tarballs and not a folder link: see `scripts/pack-local.sh`.
 
-### Core (UI-agnostic)
+## Release
 
-For detailed usage instructions, see the [Core SDK documentation](./packages/core/README.md).
-
-```typescript
-import { createKYCClient } from '@bipkyc/core';
-
-const client = createKYCClient({
-  apiKey: 'your-api-key',
-  baseUrl: 'http://localhost:3000', // Your KYC API URL
-});
-
-// Start verification
-const session = await client.startVerification({
-  documentType: 'IDENTITY_CARD',
-  country: 'MZ',
-});
-
-// Upload documents
-await client.uploadDocument({
-  verificationId: session.verificationId,
-  type: 'front',
-  imageData: 'base64-encoded-image',
-});
-
-// Check status
-const status = await client.getStatus(session.verificationId);
-```
-
-### Mobile (React Native)
-
-```typescript
-import { PaytesyKYCMobile } from '@kyciris/mobile';
-
-function App() {
-  return (
-    <PaytesyKYCMobile
-      config={{
-        apiKey: 'your-api-key',
-        externalUserId: 'user-123',
-        email: 'user@example.com',
-        onComplete: (status, error) => {
-          console.log('KYC Complete:', status, error);
-        },
-      }}
-    />
-  );
-}
-```
-
-### Web
-
-```typescript
-import { PaytesyKYCWeb } from '@kyciris/web';
-
-function App() {
-  return (
-    <PaytesyKYCWeb
-      config={{
-        apiKey: 'your-api-key',
-        externalUserId: 'user-123',
-        containerId: 'kyc-container',
-        onComplete: (status, error) => {
-          console.log('KYC Complete:', status, error);
-        },
-      }}
-    />
-  );
-}
-```
+See [RELEASING.md](./RELEASING.md).
