@@ -1,22 +1,34 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { createKYCClient, KYCCredentials } from '@bipdelivery/core';
+import { createKYCClient } from '@bipdelivery/core';
+import { LivenessStep } from '@bipdelivery/react-native';
 import { useVerificationStore } from '../store/verificationStore';
-
-const TEST_CREDENTIALS: KYCCredentials = {
-  // apiKey: process.env.EXPO_PUBLIC_KYC_API_KEY || 'sk_94d68c4f-bca9-4a56-8cfb-8288a44e6b4d',
-  // baseUrl: process.env.EXPO_PUBLIC_KYC_BASE_URL || 'https://wise-eft-healthy.ngrok-free.app',
-
-  apiKey: process.env.EXPO_PUBLIC_KYC_API_KEY || 'sk_daec2a91-dfa0-46fd-9957-d7cbfdf878a1',
-  baseUrl: process.env.EXPO_PUBLIC_KYC_BASE_URL || 'https://developers.kyciris.com',
-};
+import { KYC_CREDENTIALS } from '../constants/kyc';
 
 export default function SelfieStep() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const { verificationId, selfieImage, setSelfieImage, setStep } = useVerificationStore();
+  const { verificationId, selfieImage, setSelfieImage, setStep, livenessRequired } =
+    useVerificationStore();
+  const client = useMemo(() => createKYCClient(KYC_CREDENTIALS), []);
+
+  // A flow with the liveness challenge: the selfie IS the challenge. Needs a
+  // development build (`expo run:android`), not Expo Go — VisionCamera is native.
+  if (livenessRequired && verificationId) {
+    return (
+      <LivenessStep
+        client={client}
+        verificationId={verificationId}
+        onUploaded={() => {
+          setStep('complete');
+          router.push('/verification-complete');
+        }}
+        onCancel={() => router.back()}
+      />
+    );
+  }
 
   const requestPermissions = async () => {
     const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
@@ -94,7 +106,6 @@ export default function SelfieStep() {
 
     setLoading(true);
     try {
-      const client = createKYCClient(TEST_CREDENTIALS);
       await client.uploadSelfie({
         verificationId,
         imageData: selfieImage,

@@ -2,16 +2,9 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { createKYCClient, KYCCredentials } from '@bipdelivery/core';
+import { createKYCClient } from '@bipdelivery/core';
 import { useVerificationStore } from '../store/verificationStore';
-
-const TEST_CREDENTIALS: KYCCredentials = {
-  // apiKey: process.env.EXPO_PUBLIC_KYC_API_KEY || 'sk_94d68c4f-bca9-4a56-8cfb-8288a44e6b4d',
-  // baseUrl: process.env.EXPO_PUBLIC_KYC_BASE_URL || 'https://wise-eft-healthy.ngrok-free.app',
-
-  apiKey: process.env.EXPO_PUBLIC_KYC_API_KEY || 'sk_daec2a91-dfa0-46fd-9957-d7cbfdf878a1',
-  baseUrl: process.env.EXPO_PUBLIC_KYC_BASE_URL || 'https://developers.kyciris.com',
-};
+import { KYC_CREDENTIALS } from '../constants/kyc';
 
 export default function BackDocumentStep() {
   const router = useRouter();
@@ -94,7 +87,7 @@ export default function BackDocumentStep() {
 
     setLoading(true);
     try {
-      const client = createKYCClient(TEST_CREDENTIALS);
+      const client = createKYCClient(KYC_CREDENTIALS);
       await client.uploadDocument({
         verificationId,
         type: 'back',

@@ -1,26 +1,19 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { createKYCClient, KYCCredentials } from '@bipdelivery/core';
+import { createKYCClient, requiresLivenessChallenge } from '@bipdelivery/core';
 import { useVerificationStore } from '../store/verificationStore';
-
-const TEST_CREDENTIALS: KYCCredentials = {
-  // apiKey: process.env.EXPO_PUBLIC_KYC_API_KEY || 'sk_94d68c4f-bca9-4a56-8cfb-8288a44e6b4d',
-  // baseUrl: process.env.EXPO_PUBLIC_KYC_BASE_URL || 'https://wise-eft-healthy.ngrok-free.app',
-
-  apiKey: process.env.EXPO_PUBLIC_KYC_API_KEY || 'sk_daec2a91-dfa0-46fd-9957-d7cbfdf878a1',
-  baseUrl: process.env.EXPO_PUBLIC_KYC_BASE_URL || 'https://developers.kyciris.com',
-};
+import { KYC_CREDENTIALS } from '../constants/kyc';
 
 export default function TokenStep() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const { setVerificationId, setToken, setStep } = useVerificationStore();
+  const { setVerificationId, setToken, setStep, setLivenessRequired } = useVerificationStore();
 
   const handleCreateToken = async () => {
     setLoading(true);
     try {
-      const client = createKYCClient(TEST_CREDENTIALS);
+      const client = createKYCClient(KYC_CREDENTIALS);
       const externalId = `test-${Date.now()}`;
       const result = await client.createVerificationToken(externalId, '3');
       setToken(result.token);
@@ -31,6 +24,9 @@ export default function TokenStep() {
         externalId,
       });
       setVerificationId(verifResult.verificationId);
+      // The server decides the selfie step: a liveness flow rejects a plain
+      // selfie, so this has to follow the project's flow, not a toggle here.
+      setLivenessRequired(requiresLivenessChallenge(verifResult));
       setStep('front');
       router.push('/front-document');
     } catch (err: any) {

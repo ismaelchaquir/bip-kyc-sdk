@@ -1,16 +1,19 @@
 {
   "expo": {
-    "name": "my-app",
-    "slug": "my-app",
+    "name": "BipDelivery KYC Example",
+    "slug": "bipdelivery-kyc-example",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "bipdeliverykyc",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.myapp"
+      "bundleIdentifier": "com.bipdelivery.kycexample",
+      "infoPlist": {
+        "NSCameraUsageDescription": "The camera is used to photograph your ID document and to run the liveness check."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +24,10 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.myapp"
+      "package": "com.bipdelivery.kycexample",
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "output": "static",

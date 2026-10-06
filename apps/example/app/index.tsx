@@ -7,29 +7,19 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>KYC SDK Test App</Text>
-        <Text style={styles.subtitle}>Test the Paytesy KYC SDK components</Text>
+        <Text style={styles.title}>BipDelivery KYC</Text>
+        <Text style={styles.subtitle}>Example app for the @bipdelivery SDK packages</Text>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Test Screens</Text>
 
           <TouchableOpacity 
             style={styles.card}
-            onPress={() => router.push('/mobile-flow')}
-          >
-            <Text style={styles.cardTitle}>Mobile SDK Flow</Text>
-            <Text style={styles.cardDescription}>
-              Full automated flow with the mobile SDK component
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.card}
             onPress={() => router.push('/token-step')}
           >
-            <Text style={styles.cardTitle}>Step-by-Step Flow</Text>
+            <Text style={styles.cardTitle}>Verify an identity</Text>
             <Text style={styles.cardDescription}>
-              Manual step-by-step verification using core SDK
+              Document, then selfie — through the liveness challenge when the project's flow requires it
             </Text>
           </TouchableOpacity>
         </View>

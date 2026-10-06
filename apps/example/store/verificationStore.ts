@@ -7,7 +7,10 @@ interface VerificationState {
   backDocument: string | null;
   selfieImage: string | null;
   step: 'token' | 'front' | 'back' | 'selfie' | 'complete';
+  /** The project's flow asks for the liveness challenge instead of a plain selfie. */
+  livenessRequired: boolean;
   
+  setLivenessRequired: (required: boolean) => void;
   setVerificationId: (id: string) => void;
   setToken: (token: string) => void;
   setFrontDocument: (data: string | null) => void;
@@ -24,7 +27,9 @@ export const useVerificationStore = create<VerificationState>((set) => ({
   backDocument: null,
   selfieImage: null,
   step: 'token',
+  livenessRequired: false,
   
+  setLivenessRequired: (required) => set({ livenessRequired: required }),
   setVerificationId: (id) => set({ verificationId: id }),
   setToken: (token) => set({ token }),
   setFrontDocument: (data) => set({ frontDocument: data }),
@@ -38,5 +43,6 @@ export const useVerificationStore = create<VerificationState>((set) => ({
     backDocument: null,
     selfieImage: null,
     step: 'token',
+    livenessRequired: false,
   }),
 }));

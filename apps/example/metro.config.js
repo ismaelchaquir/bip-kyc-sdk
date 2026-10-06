@@ -13,9 +13,4 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
-config.resolver.extraNodeModules = {
-  '@kyciris/kyc-sdk-core': path.resolve(monorepoRoot, 'packages/core/dist'),
-  '@kyciris/kyc-sdk-mobile': path.resolve(monorepoRoot, 'apps/mobile/src'),
-};
-
 module.exports = config;

@@ -19,9 +19,9 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@bipkyc/core": ["packages/core/src"],
-      "@kyciris/mobile": ["apps/mobile/src"],
-      "@kyciris/web": ["apps/web/src"]
+      "@bipdelivery/core": ["packages/core/src"],
+      "@bipdelivery/react-native": ["packages/react-native/src"],
+      "@bipdelivery/web": ["apps/web/src"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

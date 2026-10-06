@@ -9,16 +9,9 @@ import {
   TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { createKYCClient, KYCCredentials, VerificationStatus } from '@bipdelivery/core';
+import { createKYCClient, VerificationStatus } from '@bipdelivery/core';
 import { useVerificationStore } from '../store/verificationStore';
-
-const TEST_CREDENTIALS: KYCCredentials = {
-  // apiKey: process.env.EXPO_PUBLIC_KYC_API_KEY || 'sk_94d68c4f-bca9-4a56-8cfb-8288a44e6b4d',
-  // baseUrl: process.env.EXPO_PUBLIC_KYC_BASE_URL || 'https://wise-eft-healthy.ngrok-free.app',
-
-  apiKey: process.env.EXPO_PUBLIC_KYC_API_KEY || 'sk_daec2a91-dfa0-46fd-9957-d7cbfdf878a1',
-  baseUrl: process.env.EXPO_PUBLIC_KYC_BASE_URL || 'https://developers.kyciris.com',
-};
+import { KYC_CREDENTIALS } from '../constants/kyc';
 
 export default function VerificationComplete() {
   const router = useRouter();
@@ -38,7 +31,7 @@ export default function VerificationComplete() {
     setLoading('getStatus');
     addLog('Getting status...');
     try {
-      const client = createKYCClient(TEST_CREDENTIALS);
+      const client = createKYCClient(KYC_CREDENTIALS);
       const result = await client.getStatus(verificationId);
       setStatus(result);
       addLog(`Status: ${result.status}`);
@@ -53,7 +46,7 @@ export default function VerificationComplete() {
     setLoading('pollStatus');
     addLog('Starting status poll...');
     try {
-      const client = createKYCClient(TEST_CREDENTIALS);
+      const client = createKYCClient(KYC_CREDENTIALS);
       const result = await client.pollStatus(verificationId, 2000, 30000);
       setStatus(result);
       addLog(`Poll complete: ${result.status}`);
