@@ -34,7 +34,7 @@ export interface KYCSession {
  * Credentials required to initialize the KYC SDK
  */
 export interface KYCCredentials {
-  /** API key for authentication */
+  /** API key for authentication. Empty when using a verification token. */
   apiKey: string;
   /** Base URL of the KYC API */
   baseUrl: string;
@@ -43,6 +43,13 @@ export interface KYCCredentials {
    * session on startVerification and reads it back to resume a paused flow.
    */
   storage?: KYCStorage;
+  /**
+   * A verification token your backend minted with the project API key. Pass it
+   * instead of `apiKey` on a device or in a browser: it is short-lived and
+   * scoped to one verification, and the API key — which can start and read any
+   * verification in the project — then never leaves your server.
+   */
+  verificationToken?: string;
 }
 
 /**
@@ -248,8 +255,12 @@ export interface UploadStepParams {
 export interface VerificationStatus {
   /** Verification ID */
   verificationId: string;
-  /** Current status: PENDING, PROCESSING, APPROVED, or REJECTED */
-  status: 'PENDING' | 'PROCESSING' | 'APPROVED' | 'REJECTED';
+  /**
+   * Current status. REVIEW is a decision like the other two terminal ones: the
+   * checks did not settle it, so a human will. A client that treats it as
+   * still-in-progress waits forever.
+   */
+  status: 'PENDING' | 'PROCESSING' | 'REVIEW' | 'APPROVED' | 'REJECTED';
   /** Face match similarity score (0-1) */
   faceMatchScore?: number;
   /** OCR extracted data from document */
@@ -452,6 +463,7 @@ export class KYCCore {
   constructor(credentials: KYCCredentials) {
     this.credentials = credentials;
     this.storage = credentials.storage;
+    this.verificationToken = credentials.verificationToken ?? null;
     this.client = axios.create({
       baseURL: credentials.baseUrl,
       headers: {
@@ -461,13 +473,32 @@ export class KYCCore {
     });
 
     this.client.interceptors.request.use((config) => {
-      config.headers['x-api-key'] = this.credentials.apiKey;
+      // Only when there is one. Sending `x-api-key: ''` from a token-only
+      // client makes the gateway read an empty key and answer 401 for a
+      // request the token alone would have been accepted for.
+      if (this.credentials.apiKey) {
+        config.headers['x-api-key'] = this.credentials.apiKey;
+      }
       if (this.verificationToken) {
         config.headers['Authorization'] = `Bearer ${this.verificationToken}`;
         config.headers['x-verification-token'] = this.verificationToken;
       }
       return config;
     });
+  }
+
+  /**
+   * Use a verification token minted elsewhere — by your own backend, with the
+   * project API key it holds and this client must not.
+   *
+   * This is the normal way to run a flow on a device or in a browser: the token
+   * is short-lived and scoped to one verification, so a leaked bundle costs one
+   * applicant's session rather than the project. Without it, a client could only
+   * obtain a token by holding the API key that mints them, which defeats the
+   * point of having tokens.
+   */
+  setVerificationToken(token: string): void {
+    this.verificationToken = token;
   }
 
   /**
@@ -1017,7 +1048,14 @@ export class KYCCore {
         try {
           const status = await this.getStatus(verificationId);
 
-          if (status.status === 'APPROVED' || status.status === 'REJECTED') {
+          // REVIEW is terminal too. The gateway sets it when the checks
+          // disagree or a job never reported, and nothing moves it on without
+          // a human — polling past it only ever ends in a timeout.
+          if (
+            status.status === 'APPROVED' ||
+            status.status === 'REJECTED' ||
+            status.status === 'REVIEW'
+          ) {
             resolve(status);
             return;
           }

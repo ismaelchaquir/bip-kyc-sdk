@@ -21,9 +21,31 @@ const kyc = createKYCClient({
 });
 ```
 
+### Using a token your backend minted
+
+On a device or in a browser, this is how the client should be credentialed: the
+API key stays on your server, and the client holds a token scoped to one
+applicant.
+
+```typescript
+const kyc = createKYCClient({
+  apiKey: '', // none on the client, by design
+  baseUrl: 'https://api.kyc.bipdelivery.com',
+  verificationToken: tokenFromYourBackend,
+});
+
+// or later, once your backend answers
+kyc.setVerificationToken(tokenFromYourBackend);
+```
+
+The project API key can start and read every verification in the project, so a
+key shipped in an app bundle or a web page is a key anyone who reads it can use.
+`POST /verification/token` is refused to anything but the API key for that
+reason — minting happens on your server, never on the client.
+
 ### Creating a Verification Token
 
-Before starting verification, create a token for secure API access:
+On your **server**, with the API key:
 
 ```typescript
 const { token, expiresIn } = await kyc.createVerificationToken(
