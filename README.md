@@ -10,7 +10,7 @@ liveness challenge, and follow the result.
 |---|---|---|
 | [`@bipdelivery/core`](./packages/core/README.md) | Any JS runtime | The API client (sessions, uploads, status, resume) and the liveness challenge machine. No UI. Published on npm. |
 | [`@bipdelivery/react-native`](./packages/react-native/README.md) | React Native (bare or Expo dev build) | `LivenessCapture` and `LivenessStep` on VisionCamera. |
-| `@bipdelivery/web` | Browsers (React) | `KYCWeb`, the full web flow, and `LivenessCapture` on MediaPipe ([LIVENESS.md](./apps/web/LIVENESS.md)). |
+| `@bipdelivery/web` | Browsers (React) | `KYCWeb`, the full web flow, and `LivenessCapture` on MediaPipe ([LIVENESS.md](./packages/web/LIVENESS.md)). |
 | [`@bipdelivery/example`](./apps/example/README.md) | — | Expo example app using core and react-native. Not published. |
 
 The rules that decide a verification live on the server. These packages coach

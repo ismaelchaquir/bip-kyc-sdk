@@ -21,7 +21,7 @@
     "paths": {
       "@bipdelivery/core": ["packages/core/src"],
       "@bipdelivery/react-native": ["packages/react-native/src"],
-      "@bipdelivery/web": ["apps/web/src"]
+      "@bipdelivery/web": ["packages/web/src"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

@@ -1,6 +1,14 @@
 {
   "name": "@bipdelivery/web",
   "version": "0.1.0",
+  "description": "Browser capture for kyc-mz: the active liveness challenge and the full web verification flow, on MediaPipe.",
+  "files": [
+    "dist",
+    "LIVENESS.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -14,8 +22,8 @@
     "playground:build": "vite build"
   },
   "peerDependencies": {
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react": ">=18",
+    "react-dom": ">=18"
   },
   "dependencies": {
     "@bipdelivery/core": "workspace:*",
