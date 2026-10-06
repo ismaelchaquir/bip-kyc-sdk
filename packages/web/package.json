@@ -1,6 +1,6 @@
 {
   "name": "@bipdelivery/web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Browser capture for kyc-mz: the active liveness challenge and the full web verification flow, on MediaPipe.",
   "files": [
     "dist",

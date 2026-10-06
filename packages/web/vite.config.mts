@@ -34,6 +34,14 @@ export default defineConfig({
   build: {
     outDir: '../playground-dist',
     emptyOutDir: true,
+    rollupOptions: {
+      // Two pages, one build: index.html drives the flow with core call by
+      // call, managed.html hands the same flow to <KYCWeb />.
+      input: {
+        index: 'playground/index.html',
+        managed: 'playground/managed.html',
+      },
+    },
   },
   plugins: [react(), basicSsl()],
   // Stamped into the page so the running build is visible on the device.

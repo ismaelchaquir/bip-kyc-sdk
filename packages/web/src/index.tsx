@@ -34,7 +34,19 @@ export interface KYCWebStrings {
 }
 
 export interface KYCWebConfig {
-  apiKey: string;
+  /**
+   * Project API key. **Avoid this in a browser**: it is project-wide and
+   * long-lived, so anyone who reads the bundle can start and read verifications
+   * on your account. Prefer `verificationToken`, and keep the key on your
+   * server. Present for local testing and server-rendered tools only.
+   */
+  apiKey?: string;
+  /**
+   * A verification token your backend minted with the project API key: short
+   * lived, scoped to one applicant, and enough for every call this flow makes.
+   * This is how a public page should be credentialed.
+   */
+  verificationToken?: string;
   baseUrl: string;
   documentType: DocumentType;
   country: string;
@@ -109,8 +121,13 @@ export function KYCWeb({ config }: KYCWebProps): React.ReactElement {
   const [result, setResult] = useState<'approved' | 'rejected' | null>(null);
 
   const getClient = useCallback(
-    () => createKYCClient({ apiKey: config.apiKey, baseUrl: config.baseUrl }),
-    [config.apiKey, config.baseUrl],
+    () =>
+      createKYCClient({
+        apiKey: config.apiKey ?? '',
+        baseUrl: config.baseUrl,
+        verificationToken: config.verificationToken,
+      }),
+    [config.apiKey, config.verificationToken, config.baseUrl],
   );
 
   // Steps depend on document type: driving license is single-sided.

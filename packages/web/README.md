@@ -30,8 +30,27 @@ const challenge = await client.createLivenessChallenge(verificationId);
 />;
 ```
 
-`KYCWeb` wraps the whole flow (token, document sides, selfie) if you want the
-screens as well as the camera.
+`KYCWeb` runs the whole flow — it starts the verification, asks for the selfie
+and each side of the document, waits for the decision and reports it — if you
+want the screens as well as the camera:
+
+```tsx
+<KYCWeb
+  config={{
+    baseUrl,
+    verificationToken,  // minted by your backend; never ship the API key here
+    documentType: 'IDENTITY_CARD',
+    country: 'MZ',
+    externalUserId: user.id,
+    locale: 'pt',
+    onComplete: (status) => router.push(status === 'approved' ? '/done' : '/retry'),
+  }}
+/>
+```
+
+Both approaches are in the playground: `pnpm playground` serves the core-driven
+page at `/`, and the managed flow at `/managed.html`. Mint a session for either
+with `scripts/new-liveness-session.sh`.
 
 ## What this is, and is not
 

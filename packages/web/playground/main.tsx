@@ -73,17 +73,21 @@ function App() {
   const [busy, setBusy] = useState(false);
 
   /**
-   * One client for the page's lifetime. `createVerificationToken` is never
-   * called — the token is injected directly, because minting it needs the API
-   * key this page deliberately does not have.
+   * One client for the page's lifetime, credentialed by the token alone:
+   * `createVerificationToken` is never called here, because minting a token
+   * needs the API key this page deliberately does not have.
    */
-  const client = useMemo(() => {
-    if (!session) return null;
-    const c = createKYCClient({ apiKey: '', baseUrl: API_BASE });
-    (c as unknown as { verificationToken: string }).verificationToken =
-      session.token;
-    return c;
-  }, [session]);
+  const client = useMemo(
+    () =>
+      session
+        ? createKYCClient({
+            apiKey: '',
+            baseUrl: API_BASE,
+            verificationToken: session.token,
+          })
+        : null,
+    [session],
+  );
 
   const requestChallenge = useCallback(async () => {
     if (!client || !session) return;
